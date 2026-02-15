@@ -41,3 +41,18 @@ app-example
 # generated native folders
 /ios
 /android
+# For React Native projects, create .gitignore with:
+cat > .gitignore << EOF
+node_modules/
+package-lock.json
+ios/Pods/
+ios/DerivedData/
+android/app/build/
+android/.gradle/
+.env
+.DS_Store
+*.log
+*.iml
+.idea/
+.vscode/
+EOF
