@@ -1,581 +1,581 @@
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  NativeSyntheticEvent,
   Platform,
+  SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
+  TextInputKeyPressEventData,
   TouchableOpacity,
   View
 } from 'react-native';
+import useAuth from '../hooks/useAuth';
 
-// Define types
-type RootStackParamList = {
-  Login: undefined;
-  Register: undefined;
-  Home: undefined;
-};
+// Define types for component props
+interface RegisterScreenProps {}
 
-type RegisterScreenNavigationProp = NativeStackNavigationProp<
-  RootStackParamList,
-  'Register'
->;
-
-interface Props {
-  navigation: RegisterScreenNavigationProp;
+// Define types for form data
+interface RegisterFormData {
+  fullName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
 }
 
-// Mock useAuth hook - replace with your actual implementation
-const useAuth = () => {
-  const register = async ({ name, email, password }: { name: string; email: string; password: string }) => {
-    // Implement your registration logic here
-    console.log('Registering:', { name, email, password });
-    return { success: true };
-  };
-
-  const loginWithGoogle = async () => {
-    console.log('Google login');
-    return { success: true };
-  };
-
-  const loginWithFacebook = async () => {
-    console.log('Facebook login');
-    return { success: true };
-  };
-
-  const loginWithLinkedIn = async () => {
-    console.log('LinkedIn login');
-    return { success: true };
-  };
-
-  return {
-    register,
-    loginWithGoogle,
-    loginWithFacebook,
-    loginWithLinkedIn,
-  };
+// Extend TouchableOpacity props for web
+type WebTouchableProps = {
+  className?: string;
+  type?: 'button' | 'submit' | 'reset';
 };
 
-export default function RegisterScreen({ navigation }: Props) {
-  // State management
-  const [name, setName] = useState<string>('');
+const RegisterScreen: React.FC<RegisterScreenProps> = () => {
+  const [fullName, setFullName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
-  const [socialLoading, setSocialLoading] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
-  const [focusedInput, setFocusedInput] = useState<string | null>(null);
-  
-  const { register, loginWithGoogle, loginWithFacebook, loginWithLinkedIn } = useAuth();
+  const [agreeToTerms, setAgreeToTerms] = useState<boolean>(false);
 
-  // Validation function
-  const validateForm = (): boolean => {
-    if (!name.trim()) {
-      Alert.alert('Validation Error', 'Please enter your name');
-      return false;
-    }
-    
-    if (!email.trim()) {
-      Alert.alert('Validation Error', 'Please enter your email');
-      return false;
-    }
-    
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      Alert.alert('Validation Error', 'Please enter a valid email address');
-      return false;
-    }
-    
-    if (!password) {
-      Alert.alert('Validation Error', 'Please enter a password');
-      return false;
-    }
-    
-    if (password.length < 6) {
-      Alert.alert('Validation Error', 'Password must be at least 6 characters');
-      return false;
-    }
-    
-    if (password !== confirmPassword) {
-      Alert.alert('Validation Error', 'Passwords do not match');
-      return false;
-    }
-    
-    return true;
-  };
+  const navigation = useNavigation<any>();
+  const { signUp } = useAuth();
 
-  // Handle email/password registration
   const handleRegister = async (): Promise<void> => {
-    if (!validateForm()) return;
+    // Validation
+    if (!fullName || !email || !password || !confirmPassword) {
+      Alert.alert('Validation', 'Please fill in all fields');
+      return;
+    }
 
-    setLoading(true);
+    if (password !== confirmPassword) {
+      Alert.alert('Validation', 'Passwords do not match');
+      return;
+    }
+
+    if (password.length < 8) {
+      Alert.alert('Validation', 'Password must be at least 8 characters long');
+      return;
+    }
+
+    if (!agreeToTerms) {
+      Alert.alert('Validation', 'Please agree to the terms and conditions');
+      return;
+    }
+
     try {
-      await register({ 
-        name: name.trim(), 
-        email: email.trim().toLowerCase(), 
-        password 
-      });
-      Alert.alert('Success', 'Registration successful!', [
-        { text: 'OK', onPress: () => navigation?.navigate('Login') }
-      ]);
+      await signUp(fullName.trim(), email.trim(), password);
+      Alert.alert('Success', 'Account created successfully!');
+      navigation.navigate('Login');
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unable to register';
-      Alert.alert('Registration Failed', errorMessage);
-    } finally {
-      setLoading(false);
+      Alert.alert('Registration failed', (err as Error).message || 'Unable to create account');
     }
   };
 
-  // Handle social login
-  const handleSocialLogin = async (provider: 'google' | 'facebook' | 'linkedin'): Promise<void> => {
-    setSocialLoading(provider);
+  const handleLogin = (): void => {
+    navigation.navigate('Login');
+  };
+
+  const handleSocialRegister = async (provider: string): Promise<void> => {
     try {
-      let result;
-      switch (provider) {
-        case 'google':
-          result = await loginWithGoogle();
-          break;
-        case 'facebook':
-          result = await loginWithFacebook();
-          break;
-        case 'linkedin':
-          result = await loginWithLinkedIn();
-          break;
-      }
+      // Dummy social registration: create a demo account
+      const demoEmail = `${provider.toLowerCase()}@example.com`;
+      await signUp(`${provider} User`, demoEmail, 'password');
+      Alert.alert('Success', 'Account created successfully!');
+      navigation.navigate('Login');
+    } catch (err) {
+      Alert.alert('Social registration failed', (err as Error).message || 'Unable to create account');
+    }
+  };
+
+  const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>): void => {
+    // Handle Enter key for web
+    if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter') {
+      handleRegister();
+    }
+  };
+
+  const togglePasswordVisibility = (): void => {
+    setShowPassword((prev: boolean) => !prev);
+  };
+
+  const toggleConfirmPasswordVisibility = (): void => {
+    setShowConfirmPassword((prev: boolean) => !prev);
+  };
+
+  const toggleTermsAgreement = (): void => {
+    setAgreeToTerms((prev: boolean) => !prev);
+  };
+
+  // Web-specific hover styles
+  React.useEffect(() => {
+    if (Platform.OS === 'web') {
+      const style = document.createElement('style');
+      style.textContent = `
+        .register-button:hover {
+          background-color: #0056b3 !important;
+          transform: scale(1.02);
+          transition: all 0.2s ease;
+        }
+        .social-button:hover {
+          background-color: #e0e0e0 !important;
+          transform: scale(1.1);
+          transition: all 0.2s ease;
+        }
+        .login-link:hover {
+          text-decoration: underline;
+        }
+        .terms-link:hover {
+          text-decoration: underline;
+          color: #0056b3;
+        }
+        .checkbox:hover {
+          border-color: #007AFF;
+        }
+      `;
+      document.head.appendChild(style);
       
-      if (result?.success) {
-        Alert.alert('Success', `Successfully signed in with ${provider}`);
-        // navigation?.navigate('Home');
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : `Unable to login with ${provider}`;
-      Alert.alert(`${provider} Login Failed`, errorMessage);
-    } finally {
-      setSocialLoading(null);
+      return () => {
+        document.head.removeChild(style);
+      };
     }
-  };
-
-  // Dynamic container based on platform
-  const Container = Platform.OS === 'web' ? View : KeyboardAvoidingView;
-
-  // Dynamic styles based on focus state
-  const getInputStyle = (inputName: string): any[] => [
-    styles.input,
-    focusedInput === inputName && styles.inputFocused,
-  ];
-
-  const getPasswordContainerStyle = (inputName: string): any[] => [
-    styles.passwordContainer,
-    focusedInput === inputName && styles.passwordContainerFocused,
-  ];
-
-  // Check if a specific social provider is loading
-  const isSocialLoading = (provider: string): boolean => socialLoading === provider;
-
-  // Determine if any loading is happening
-  const isAnyLoading = loading || socialLoading !== null;
+  }, []);
 
   return (
-    <Container
-      style={styles.container}
-      {...(Platform.OS !== 'web' && {
-        behavior: Platform.OS === 'ios' ? 'padding' : 'height',
-        keyboardVerticalOffset: Platform.OS === 'ios' ? 64 : 0
-      })}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-        bounces={false}
-        keyboardShouldPersistTaps="handled"
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <View style={styles.content}>
-          <View style={[styles.formContainer, Platform.OS === 'web' && styles.formContainerWeb]}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Sign up to get started</Text>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          bounces={Platform.OS !== 'web'}
+        >
+          <View style={styles.headerContainer}>
+            <Text style={styles.welcomeText}>Create Account</Text>
+            <Text style={styles.subtitleText}>Sign up to get started</Text>
+          </View>
 
-            <View style={styles.form}>
-              {/* Name Input */}
+          <View style={styles.formContainer}>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Full Name</Text>
               <TextInput
-                style={getInputStyle('name')}
-                placeholder="Full Name"
-                value={name}
-                onChangeText={setName}
-                autoCapitalize="words"
+                style={styles.input}
+                placeholder="Enter your full name"
                 placeholderTextColor="#999"
-                editable={!isAnyLoading}
-                onFocus={() => setFocusedInput('name')}
-                onBlur={() => setFocusedInput(null)}
-                returnKeyType="next"
+                value={fullName}
+                onChangeText={setFullName}
+                autoCapitalize="words"
+                autoCorrect={false}
+                autoComplete={Platform.OS === 'web' ? 'name' : 'off'}
+                onKeyPress={handleKeyPress}
+                accessibilityLabel="Full name input field"
+                accessibilityHint="Enter your full name"
               />
+            </View>
 
-              {/* Email Input */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Email</Text>
               <TextInput
-                style={getInputStyle('email')}
-                placeholder="Email"
+                style={styles.input}
+                placeholder="Enter your email"
+                placeholderTextColor="#999"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                placeholderTextColor="#999"
-                editable={!isAnyLoading}
-                onFocus={() => setFocusedInput('email')}
-                onBlur={() => setFocusedInput(null)}
-                returnKeyType="next"
+                autoCorrect={false}
+                autoComplete={Platform.OS === 'web' ? 'email' : 'off'}
+                onKeyPress={handleKeyPress}
+                accessibilityLabel="Email input field"
+                accessibilityHint="Enter your email address"
               />
+            </View>
 
-              {/* Password Input */}
-              <View style={getPasswordContainerStyle('password')}>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordContainer}>
                 <TextInput
                   style={styles.passwordInput}
-                  placeholder="Password"
+                  placeholder="Enter your password"
+                  placeholderTextColor="#999"
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
-                  placeholderTextColor="#999"
-                  editable={!isAnyLoading}
-                  onFocus={() => setFocusedInput('password')}
-                  onBlur={() => setFocusedInput(null)}
-                  returnKeyType="next"
+                  autoComplete={Platform.OS === 'web' ? 'new-password' : 'off'}
+                  onKeyPress={handleKeyPress}
+                  accessibilityLabel="Password input field"
+                  accessibilityHint="Enter your password"
                 />
                 <TouchableOpacity
+                  onPress={togglePasswordVisibility}
                   style={styles.eyeButton}
-                  onPress={() => setShowPassword(!showPassword)}
-                  disabled={isAnyLoading}
+                  activeOpacity={0.7}
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                  accessibilityHint="Toggle password visibility"
                 >
-                  <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                  <Text style={styles.eyeButtonText}>
+                    {showPassword ? '👁️' : '👁️‍🗨️'}
+                  </Text>
                 </TouchableOpacity>
               </View>
+            </View>
 
-              {/* Confirm Password Input */}
-              <View style={getPasswordContainerStyle('confirmPassword')}>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.passwordContainer}>
                 <TextInput
                   style={styles.passwordInput}
-                  placeholder="Confirm Password"
+                  placeholder="Confirm your password"
+                  placeholderTextColor="#999"
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                   secureTextEntry={!showConfirmPassword}
                   autoCapitalize="none"
-                  placeholderTextColor="#999"
-                  editable={!isAnyLoading}
-                  onFocus={() => setFocusedInput('confirmPassword')}
-                  onBlur={() => setFocusedInput(null)}
-                  returnKeyType="done"
-                  onSubmitEditing={handleRegister}
+                  autoComplete={Platform.OS === 'web' ? 'new-password' : 'off'}
+                  onKeyPress={handleKeyPress}
+                  accessibilityLabel="Confirm password input field"
+                  accessibilityHint="Re-enter your password"
                 />
                 <TouchableOpacity
+                  onPress={toggleConfirmPasswordVisibility}
                   style={styles.eyeButton}
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  disabled={isAnyLoading}
+                  activeOpacity={0.7}
+                  accessibilityLabel={showConfirmPassword ? "Hide password" : "Show password"}
+                  accessibilityHint="Toggle password visibility"
                 >
-                  <Text style={styles.eyeIcon}>{showConfirmPassword ? '👁️' : '👁️‍🗨️'}</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Register Button */}
-              <TouchableOpacity
-                style={[
-                  styles.registerButton,
-                  isAnyLoading && styles.disabledButton,
-                ]}
-                onPress={handleRegister}
-                activeOpacity={0.8}
-                disabled={isAnyLoading}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.registerButtonText}>Sign Up</Text>
-                )}
-              </TouchableOpacity>
-
-              {/* Social Login Section */}
-              <View style={styles.socialSection}>
-                <View style={styles.dividerContainer}>
-                  <View style={styles.divider} />
-                  <Text style={styles.dividerText}>OR</Text>
-                  <View style={styles.divider} />
-                </View>
-
-                <View style={styles.socialButtonsContainer}>
-                  {/* Google Button */}
-                  <TouchableOpacity
-                    style={[styles.socialButton, styles.googleButton]}
-                    onPress={() => handleSocialLogin('google')}
-                    disabled={isAnyLoading}
-                    activeOpacity={0.8}
-                  >
-                    {isSocialLoading('google') ? (
-                      <ActivityIndicator color="#DB4437" />
-                    ) : (
-                      <>
-                        <Text style={styles.googleIcon}>G</Text>
-                        <Text style={[styles.socialButtonText, styles.googleButtonText]}>Google</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-
-                  {/* Facebook Button */}
-                  <TouchableOpacity
-                    style={[styles.socialButton, styles.facebookButton]}
-                    onPress={() => handleSocialLogin('facebook')}
-                    disabled={isAnyLoading}
-                    activeOpacity={0.8}
-                  >
-                    {isSocialLoading('facebook') ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <>
-                        <Text style={styles.facebookIcon}>f</Text>
-                        <Text style={[styles.socialButtonText, styles.facebookButtonText]}>Facebook</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-
-                  {/* LinkedIn Button */}
-                  <TouchableOpacity
-                    style={[styles.socialButton, styles.linkedinButton]}
-                    onPress={() => handleSocialLogin('linkedin')}
-                    disabled={isAnyLoading}
-                    activeOpacity={0.8}
-                  >
-                    {isSocialLoading('linkedin') ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <>
-                        <Text style={styles.linkedinIcon}>in</Text>
-                        <Text style={[styles.socialButtonText, styles.linkedinButtonText]}>LinkedIn</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Login Link */}
-              <View style={styles.loginContainer}>
-                <Text style={styles.loginText}>Already have an account? </Text>
-                <TouchableOpacity onPress={() => navigation?.navigate('Login')}>
-                  <Text style={styles.loginLink}>Sign In</Text>
+                  <Text style={styles.eyeButtonText}>
+                    {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
-        </View>
-      </ScrollView>
-    </Container>
-  );
-}
 
-// Styles
+            <View style={styles.termsContainer}>
+              <TouchableOpacity
+                onPress={toggleTermsAgreement}
+                style={styles.checkbox}
+                activeOpacity={0.7}
+                accessibilityLabel="Terms and conditions checkbox"
+                accessibilityHint="Agree to terms and conditions"
+              >
+                <View style={[styles.checkboxInner, agreeToTerms && styles.checkboxChecked]}>
+                  {agreeToTerms && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.termsText}>
+                I agree to the{' '}
+                <Text 
+                  style={[styles.termsLink, Platform.OS === 'web' && ({ className: 'terms-link' } as any)]}
+                  onPress={() => Alert.alert('Terms', 'Terms and conditions would be shown here')}
+                >
+                  Terms of Service
+                </Text>{' '}
+                and{' '}
+                <Text 
+                  style={[styles.termsLink, Platform.OS === 'web' && ({ className: 'terms-link' } as any)]}
+                  onPress={() => Alert.alert('Privacy', 'Privacy policy would be shown here')}
+                >
+                  Privacy Policy
+                </Text>
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.registerButton, Platform.OS === 'web' && ({ className: 'register-button' } as any)]}
+              onPress={handleRegister}
+              activeOpacity={0.8}
+              {...(Platform.OS === 'web' ? { type: 'button' } : {})}
+              accessibilityLabel="Sign up button"
+              accessibilityHint="Tap to create your account"
+            >
+              <Text style={styles.registerButtonText}>Sign Up</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.footerContainer}>
+            <View style={styles.dividerContainer}>
+              <View style={styles.divider} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.divider} />
+            </View>
+
+            <View style={styles.socialButtonsContainer}>
+              <TouchableOpacity 
+                style={[styles.socialButton, Platform.OS === 'web' && ({ className: 'social-button' } as any)]}
+                onPress={() => handleSocialRegister('Google')}
+                activeOpacity={0.7}
+                {...(Platform.OS === 'web' ? { type: 'button' } : {})}
+                accessibilityLabel="Sign up with Google"
+                accessibilityHint="Continue with Google"
+              >
+                <Text style={styles.socialButtonText}>G</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.socialButton, Platform.OS === 'web' && ({ className: 'social-button' } as any)]}
+                onPress={() => handleSocialRegister('Facebook')}
+                activeOpacity={0.7}
+                {...(Platform.OS === 'web' ? { type: 'button' } : {})}
+                accessibilityLabel="Sign up with Facebook"
+                accessibilityHint="Continue with Facebook"
+              >
+                <Text style={styles.socialButtonText}>f</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.socialButton, Platform.OS === 'web' && ({ className: 'social-button' } as any)]}
+                onPress={() => handleSocialRegister('LinkedIn')}
+                activeOpacity={0.7}
+                {...(Platform.OS === 'web' ? { type: 'button' } : {})}
+                accessibilityLabel="Sign up with LinkedIn"
+                accessibilityHint="Continue with LinkedIn"
+              >
+                <Text style={styles.socialButtonText}>in</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.loginContainer}>
+              <Text style={styles.loginText}>Already have an account? </Text>
+              <TouchableOpacity 
+                onPress={handleLogin}
+                activeOpacity={0.7}
+                {...(Platform.OS === 'web' ? { type: 'button' } : {})}
+                accessibilityLabel="Sign in"
+                accessibilityHint="Navigate to sign in page"
+              >
+                <Text style={[styles.loginLink, Platform.OS === 'web' && ({ className: 'login-link' } as any)]}>
+                  Sign In
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+};
+
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
   container: {
     flex: 1,
     backgroundColor: '#fff',
   },
   scrollContainer: {
     flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    ...(Platform.OS === 'web' ? {
+      maxWidth: 500,
+      marginHorizontal: 'auto' as any,
+      width: '100%',
+    } : {}),
   },
-  content: {
-    flex: 1,
-    padding: Platform.OS === 'web' ? 32 : 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+  headerContainer: {
+    marginTop: Platform.OS === 'web' ? 40 : 60,
+    marginBottom: 40,
+  },
+  welcomeText: {
+    fontSize: Platform.OS === 'web' ? 36 : 32,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subtitleText: {
+    fontSize: Platform.OS === 'web' ? 18 : 16,
+    color: '#666',
+    textAlign: 'center',
   },
   formContainer: {
     width: '100%',
   },
-  formContainerWeb: {
-    maxWidth: 400,
-    marginHorizontal: 'auto' as any,
-    padding: 20,
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#eaeaea',
-    ...(Platform.OS === 'web' 
-      ? { boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)' } 
-      : {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
-          elevation: 3,
-        }),
+  inputContainer: {
+    marginBottom: 20,
   },
-  title: {
-    fontSize: Platform.select({ web: 32, default: 28 }),
-    fontWeight: '700',
-    marginBottom: 8,
-    textAlign: 'center',
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
     color: '#333',
-  },
-  subtitle: {
-    fontSize: Platform.select({ web: 16, default: 15 }),
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: Platform.select({ web: 32, default: 24 }),
-  },
-  form: {
-    width: '100%',
+    marginBottom: 8,
   },
   input: {
-    height: Platform.select({ web: 48, default: 52 }),
+    height: Platform.OS === 'web' ? 48 : 50,
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 10,
     paddingHorizontal: 16,
-    marginBottom: 16,
-    backgroundColor: '#f8f8f8',
+    fontSize: 16,
     color: '#333',
-    fontSize: Platform.select({ web: 15, default: 16 }),
-  },
-  inputFocused: {
-    borderColor: '#007AFF',
-    borderWidth: 2,
+    backgroundColor: '#f8f8f8',
   },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 10,
     backgroundColor: '#f8f8f8',
   },
-  passwordContainerFocused: {
-    borderColor: '#007AFF',
-    borderWidth: 2,
-  },
   passwordInput: {
     flex: 1,
-    height: Platform.select({ web: 48, default: 52 }),
+    height: Platform.OS === 'web' ? 48 : 50,
     paddingHorizontal: 16,
+    fontSize: 16,
     color: '#333',
-    fontSize: Platform.select({ web: 15, default: 16 }),
-  },
+  } as any,
   eyeButton: {
     paddingHorizontal: 16,
-    height: '100%',
+    height: Platform.OS === 'web' ? 48 : 50,
     justifyContent: 'center',
+    ...(Platform.OS === 'web' ? {
+      cursor: 'pointer',
+    } : {}),
   },
-  eyeIcon: {
+  eyeButtonText: {
     fontSize: 20,
+  },
+  termsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    marginTop: 8,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...(Platform.OS === 'web' ? {
+      cursor: 'pointer',
+    } : {}),
+  },
+  checkboxInner: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#007AFF',
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+  },
+  termsLink: {
+    color: '#007AFF',
+    fontWeight: '500',
+    ...(Platform.OS === 'web' ? {
+      cursor: 'pointer',
+    } : {}),
   },
   registerButton: {
     backgroundColor: '#007AFF',
-    height: Platform.select({ web: 50, default: 54 }),
+    height: Platform.OS === 'web' ? 52 : 55,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  disabledButton: {
-    backgroundColor: '#99c2ff',
+    shadowColor: '#007AFF',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: Platform.OS === 'web' ? 0.2 : 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    ...(Platform.OS === 'web' ? {
+      cursor: 'pointer',
+      transition: 'all 0.2s ease',
+    } : {}),
   },
   registerButtonText: {
     color: '#fff',
-    fontSize: Platform.select({ web: 17, default: 18 }),
+    fontSize: 18,
     fontWeight: '600',
   },
-  socialSection: {
-    marginTop: 10,
-    marginBottom: 20,
+  footerContainer: {
+    marginTop: 40,
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 30,
   },
   divider: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#ddd',
   },
   dividerText: {
-    color: '#666',
-    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    color: '#999',
     fontSize: 14,
   },
   socialButtonsContainer: {
-    gap: 12,
-  },
-  socialButton: {
-    height: Platform.select({ web: 48, default: 50 }),
-    borderRadius: 10,
     flexDirection: 'row',
     justifyContent: 'center',
+    gap: 20,
+    marginBottom: 30,
+  },
+  socialButton: {
+    width: Platform.OS === 'web' ? 48 : 50,
+    height: Platform.OS === 'web' ? 48 : 50,
+    borderRadius: 25,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    backgroundColor: '#fff',
-  },
-  googleButton: {
-    backgroundColor: '#fff',
-    borderColor: '#ddd',
-  },
-  facebookButton: {
-    backgroundColor: '#1877f2',
-    borderColor: '#1877f2',
-  },
-  linkedinButton: {
-    backgroundColor: '#0077b5',
-    borderColor: '#0077b5',
-  },
-  googleIcon: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#DB4437',
-    marginRight: 8,
-  },
-  facebookIcon: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginRight: 8,
-  },
-  linkedinIcon: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginRight: 8,
-    backgroundColor: '#0077b5',
-    paddingHorizontal: 2,
+    ...(Platform.OS === 'web' ? {
+      cursor: 'pointer',
+      transition: 'all 0.2s ease',
+    } : {}),
   },
   socialButtonText: {
-    fontSize: Platform.select({ web: 15, default: 16 }),
-    fontWeight: '500',
-  },
-  googleButtonText: {
+    fontSize: Platform.OS === 'web' ? 20 : 18,
+    fontWeight: '600',
     color: '#333',
-  },
-  facebookButtonText: {
-    color: '#fff',
-  },
-  linkedinButtonText: {
-    color: '#fff',
   },
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 16,
+    flexWrap: 'wrap',
   },
   loginText: {
     color: '#666',
-    fontSize: Platform.select({ web: 15, default: 14 }),
+    fontSize: 14,
   },
   loginLink: {
     color: '#007AFF',
-    fontSize: Platform.select({ web: 15, default: 14 }),
+    fontSize: 14,
     fontWeight: '600',
+    ...(Platform.OS === 'web' ? {
+      cursor: 'pointer',
+    } : {}),
   },
 });
+
+export default RegisterScreen;
