@@ -56,3 +56,10 @@ android/.gradle/
 .idea/
 .vscode/
 EOF
+
+# Firebase
+google-services.json
+GoogleService-Info.plist
+
+# Environment
+.env

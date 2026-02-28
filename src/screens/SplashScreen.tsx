@@ -1,15 +1,13 @@
-import { useNavigation } from '@react-navigation/native';
 import React, { useEffect } from 'react';
 import { Dimensions, Image, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  cancelAnimation,
-  Easing,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
+    cancelAnimation,
+    Easing,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
 } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
@@ -17,8 +15,7 @@ const { width } = Dimensions.get('window');
 const SplashScreen: React.FC = () => {
   const opacity = useSharedValue(0);
   const scale = useSharedValue(0.9);
-  const loaderProgress = useSharedValue(0); // ✅ number instead of %
-  const navigation = useNavigation<any>();
+  const loaderProgress = useSharedValue(0);
 
   useEffect(() => {
     // Fade In
@@ -34,17 +31,10 @@ const SplashScreen: React.FC = () => {
       true
     );
 
-    // Loader animation (0 → 1) — run once then navigate to Login
-    const goToLogin = () => navigation.replace('Login');
-
+    // Loader animation (0 → 1)
     loaderProgress.value = withTiming(
       1,
-      { duration: 3000, easing: Easing.linear },
-      (isFinished) => {
-        if (isFinished) {
-          runOnJS(goToLogin)();
-        }
-      }
+      { duration: 3000, easing: Easing.linear }
     );
 
     return () => {
