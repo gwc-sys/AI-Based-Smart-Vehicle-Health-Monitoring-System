@@ -6,6 +6,8 @@ export type Vehicle = {
   model?: string;
   year?: number;
   vin?: string;
+  plateNumber?: string;
+  fuelType?: string;
 };
 
 export async function getVehicles(): Promise<Vehicle[]> {

@@ -26,6 +26,7 @@ type User = {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   emailVerified?: boolean;
   createdAt?: string;
 };
@@ -38,6 +39,8 @@ type AuthContextType = {
   signOut: () => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
+  updateUserProfile: (data: Partial<User>) => Promise<void>;
+  updateUserPreferences: (prefs: any) => Promise<void>;
   sendVerificationEmail: (email?: string) => Promise<void>;
   verifyEmail: (token: string) => Promise<void>;
 };
@@ -180,6 +183,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
   };
 
+  const updateUserProfile = async (data: Partial<User>) => {
+    // simply reuse updateUser for profile changes
+    return updateUser(data);
+  };
+
+  const updateUserPreferences = async (prefs: any) => {
+    // store preferences locally; backend logic could be added here
+    try {
+      await AsyncStorage.setItem('userPreferences', JSON.stringify(prefs));
+    } catch (err) {
+      console.error('Failed to save user preferences:', err);
+    }
+  };
+
   const sendVerificationEmail = async (email?: string) => {
     setLoading(true);
     setError(null);
@@ -223,7 +240,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, error, signIn, signOut, signUp, updateUser, sendVerificationEmail, verifyEmail }}
+      value={{
+        user,
+        loading,
+        error,
+        signIn,
+        signOut,
+        signUp,
+        updateUser,
+        updateUserProfile,
+        updateUserPreferences,
+        sendVerificationEmail,
+        verifyEmail,
+      }}
     >
       {children}
     </AuthContext.Provider>
