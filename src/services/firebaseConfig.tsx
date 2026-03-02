@@ -62,7 +62,7 @@ export function initFirebase(): { initialized: boolean; config: typeof firebaseC
  * NOTE: These use the Firebase Web SDK (`firebase/auth`).
  * Ensure you have `firebase` installed (e.g. `npm install firebase`).
  */
-import { getAuth, isSignInWithEmailLink, sendEmailVerification } from 'firebase/auth';
+import { applyActionCode, getAuth, sendEmailVerification } from 'firebase/auth';
 
 export const firebaseEmailVerification = {
   /**
@@ -79,16 +79,31 @@ export const firebaseEmailVerification = {
         throw new Error('No user currently signed in');
       }
       // choose appropriate deep link / web URL for verification
-      const actionUrl =
+      // Build a safe action URL (must include protocol). Prefer explicit deep link
+      // (Expo) or a configured web URL. Fall back to the Firebase authDomain with https://
+      let actionUrl =
         process.env.EXPO_APP_DEEP_LINK_URI ||
         process.env.EXPO_EMAIL_VERIFICATION_WEB_URL ||
         process.env.EXPO_FIREBASE_VERIFICATION_URL ||
-        `${firebaseConfig.authDomain}`;
+        firebaseConfig.authDomain || '';
 
-      await sendEmailVerification(user, {
-        handleCodeInApp: true,
+      if (actionUrl && !/^https?:\/\//i.test(actionUrl) && !/^[a-z]+:\/\//i.test(actionUrl)) {
+        // if it's just a domain like 'project.firebaseapp.com', prepend https://
+        actionUrl = `https://${actionUrl}`;
+      }
+
+      const actionCodeSettings = {
         url: actionUrl,
-      });
+        handleCodeInApp: true,
+        iOS: { bundleId: process.env.EXPO_IOS_BUNDLE_ID },
+        android: {
+          packageName: process.env.EXPO_ANDROID_PACKAGE_NAME,
+          installApp: true,
+          minimumVersion: '12',
+        },
+      };
+
+      await sendEmailVerification(user, actionCodeSettings as any);
       console.log('Verification email sent to:', user.email);
     } catch (error: any) {
       throw new Error(`Failed to send verification email: ${error.message}`);
@@ -125,22 +140,28 @@ export const firebaseEmailVerification = {
     try {
       initFirebase();
       const auth = getAuth();
-      if (!isSignInWithEmailLink(auth, link)) {
-        throw new Error('Invalid verification link');
+      if (!link) throw new Error('No link provided');
+
+      // extract the oobCode (action code) from the link
+      let oobCode: string | null = null;
+      try {
+        const url = new URL(link);
+        oobCode = url.searchParams.get('oobCode');
+      } catch (e) {
+        // fallback to regex if URL parsing isn't available
+        const m = link.match(/[?&]oobCode=([^&]+)/);
+        oobCode = m ? decodeURIComponent(m[1]) : null;
       }
-      
+
+      if (!oobCode) throw new Error('Verification code not found in link');
+
+      // apply the action code to verify the email
+      await applyActionCode(auth, oobCode);
+
+      // if there's a signed-in user, reload to reflect verified status
       const user = auth.currentUser;
-      if (!user) {
-        throw new Error('No user signed in');
-      }
-      
-      await user.reload();
-      if (user.emailVerified) {
-        console.log('Email already verified');
-        return;
-      }
-      
-      throw new Error('Email verification link is invalid or expired');
+      if (user) await user.reload();
+      console.log('Email verified via link');
     } catch (error: any) {
       throw new Error(`Email verification failed: ${error.message}`);
     }

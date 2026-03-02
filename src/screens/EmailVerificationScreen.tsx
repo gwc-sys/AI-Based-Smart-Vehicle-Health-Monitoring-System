@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import {
     Alert,
     KeyboardAvoidingView,
+    Linking,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -11,7 +12,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import useAuth from '../hooks/useAuth';
 
@@ -39,6 +40,50 @@ const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = () => {
       // Auto-verify when a code is provided
       handleAutoVerify(tokenFromLink);
     }
+    // also check initial URL (if app was opened from the verification link)
+    (async () => {
+      try {
+        const initial = await Linking.getInitialURL();
+        if (initial) {
+          // extract oobCode param
+          let code: string | null = null;
+          try {
+            const u = new URL(initial);
+            code = u.searchParams.get('oobCode');
+          } catch (e) {
+            const m = initial.match(/[?&]oobCode=([^&]+)/);
+            code = m ? decodeURIComponent(m[1]) : null;
+          }
+          if (code) {
+            setVerificationToken(code);
+            handleAutoVerify(code);
+          }
+        }
+      } catch (err) {
+        // ignore
+      }
+    })();
+
+    // listen for link events while app is open
+    const onLink = ({ url }: { url: string }) => {
+      if (!url) return;
+      let code: string | null = null;
+      try {
+        const u = new URL(url);
+        code = u.searchParams.get('oobCode');
+      } catch (e) {
+        const m = url.match(/[?&]oobCode=([^&]+)/);
+        code = m ? decodeURIComponent(m[1]) : null;
+      }
+      if (code) {
+        setVerificationToken(code);
+        handleAutoVerify(code);
+      }
+    };
+    Linking.addEventListener('url', onLink as any);
+    return () => {
+      Linking.removeEventListener('url', onLink as any);
+    };
   }, [route.params]);
 
   const handleAutoVerify = async (token: string): Promise<void> => {

@@ -8,6 +8,8 @@ export type Vehicle = {
   vin?: string;
   plateNumber?: string;
   fuelType?: string;
+  status?: 'active' | 'maintenance' | 'inactive' | string;
+  nextMaintenance?: string | null;
 };
 
 export async function getVehicles(): Promise<Vehicle[]> {

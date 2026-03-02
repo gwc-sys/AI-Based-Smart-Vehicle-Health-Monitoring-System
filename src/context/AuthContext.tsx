@@ -154,13 +154,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const credential = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
       const firebaseUser = credential.user;
       if (firebaseUser) {
-        await firebaseUser.updateProfile({ displayName: name.trim() });
+        await updateProfile(firebaseUser, { displayName: name.trim() });
+        // update local user state and persist
+        const mapped = mapFirebaseUser(firebaseUser);
+        setUser(mapped);
+        await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
       }
-      // send verification link
+      // send verification link to the newly created (and still-signed-in) user
       await firebaseEmailVerification.sendVerificationEmail();
-      // clear current user so they must sign in after verifying
-      await auth().signOut();
-      setUser(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Registration failed';
       setError(msg);
