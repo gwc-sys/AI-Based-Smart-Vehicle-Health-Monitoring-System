@@ -1,5 +1,5 @@
-import { useNavigation } from '@react-navigation/native';
-import React, { useState } from 'react';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import React, { useEffect, useState } from 'react';
 import {
     Alert,
     KeyboardAvoidingView,
@@ -48,7 +48,17 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
   const [agreeToTerms, setAgreeToTerms] = useState<boolean>(false);
 
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const { loading } = useAuth();
+
+  // Handle route params from legal pages
+  useEffect(() => {
+    if (route.params?.agreedTerms || route.params?.agreedPrivacy) {
+      setAgreeToTerms(true);
+      // Clear the params after handling
+      navigation.setParams({ agreedTerms: undefined, agreedPrivacy: undefined });
+    }
+  }, [route.params, navigation]);
 
   const handleRegister = async (): Promise<void> => {
     // Validation
@@ -93,16 +103,20 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
     navigation.navigate('Login');
   };
 
-  const handleSocialRegister = async (provider: string): Promise<void> => {
-    try {
-      // Dummy social registration: create a demo account
-      const demoEmail = `${provider.toLowerCase()}@example.com`;
-      await signUp(`${provider} User`, demoEmail, 'password');
-      Alert.alert('Success', 'Account created successfully!');
-      navigation.navigate('Login');
-    } catch (err) {
-      Alert.alert('Social registration failed', (err as Error).message || 'Unable to create account');
-    }
+  const handleSocialRegister = (provider: string): void => {
+    // Social registration will be implemented with actual OAuth integration
+    Alert.alert(
+      'Coming Soon',
+      `${provider} registration will be available soon. Please use email registration for now.`
+    );
+  };
+
+  const handleOpenTermsOfService = (): void => {
+    navigation.navigate('TermsOfService');
+  };
+
+  const handleOpenPrivacyPolicy = (): void => {
+    navigation.navigate('PrivacyPolicy');
   };
 
   const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>): void => {
@@ -302,14 +316,14 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
                 I agree to the{' '}
                 <Text 
                   style={[styles.termsLink, Platform.OS === 'web' && ({ className: 'terms-link' } as any)]}
-                  onPress={() => Alert.alert('Terms', 'Terms and conditions would be shown here')}
+                  onPress={handleOpenTermsOfService}
                 >
                   Terms of Service
                 </Text>{' '}
                 and{' '}
                 <Text 
                   style={[styles.termsLink, Platform.OS === 'web' && ({ className: 'terms-link' } as any)]}
-                  onPress={() => Alert.alert('Privacy', 'Privacy policy would be shown here')}
+                  onPress={handleOpenPrivacyPolicy}
                 >
                   Privacy Policy
                 </Text>
