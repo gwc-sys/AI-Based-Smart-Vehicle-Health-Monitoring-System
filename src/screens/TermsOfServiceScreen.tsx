@@ -10,17 +10,28 @@ import {
     View,
 } from 'react-native';
 
-interface TermsOfServiceScreenProps {}
+interface TermsOfServiceScreenProps {
+  onClose?: () => void;
+  onAgree?: () => void;
+}
 
-const TermsOfServiceScreen: React.FC<TermsOfServiceScreenProps> = () => {
+const TermsOfServiceScreen: React.FC<TermsOfServiceScreenProps> = ({ onClose, onAgree }) => {
   const navigation = useNavigation<any>();
 
   const handleGoBack = (): void => {
+    if (onClose) {
+      onClose();
+      return;
+    }
+
     navigation.goBack();
   };
 
   const handleIAgree = (): void => {
-    navigation.navigate('Register', { agreedTerms: true });
+    if (onAgree) {
+      onAgree();
+    }
+    handleGoBack();
   };
 
   return (

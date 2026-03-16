@@ -10,17 +10,28 @@ import {
     View,
 } from 'react-native';
 
-interface PrivacyPolicyScreenProps {}
+interface PrivacyPolicyScreenProps {
+  onClose?: () => void;
+  onAgree?: () => void;
+}
 
-const PrivacyPolicyScreen: React.FC<PrivacyPolicyScreenProps> = () => {
+const PrivacyPolicyScreen: React.FC<PrivacyPolicyScreenProps> = ({ onClose, onAgree }) => {
   const navigation = useNavigation<any>();
 
   const handleGoBack = (): void => {
+    if (onClose) {
+      onClose();
+      return;
+    }
+
     navigation.goBack();
   };
 
   const handleIAgree = (): void => {
-    navigation.navigate('Register', { agreedPrivacy: true });
+    if (onAgree) {
+      onAgree();
+    }
+    handleGoBack();
   };
 
   return (
