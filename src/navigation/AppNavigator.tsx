@@ -1,7 +1,9 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import useAuth from '../hooks/useAuth';
+import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import SplashScreen from '../screens/SplashScreen';
+import TermsOfServiceScreen from '../screens/TermsOfServiceScreen';
 import AuthNavigator from './AuthNavigator';
 import BottomTabNavigator from './BottomTabNavigator';
 
@@ -32,6 +34,8 @@ export default function AppNavigator() {
       ) : (
         <RootStack.Screen name="Auth" component={AuthNavigator} />
       )}
+      <RootStack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+      <RootStack.Screen name="TermsOfService" component={TermsOfServiceScreen} />
     </RootStack.Navigator>
   );
 }
