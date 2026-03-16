@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { AuthProvider } from '../context/AuthContext';
 import { VehicleProvider } from '../context/VehicleContext';
 import AppNavigator from '../navigation/AppNavigator';
@@ -8,9 +8,7 @@ import { initFirebase } from '../services/firebaseConfig';
 
 export default function Page() {
   // ensure firebase (JS SDK) is initialized on web/any JS runtime
-  useEffect(() => {
-    initFirebase();
-  }, []);
+  initFirebase();
 
   return (
     <AuthProvider>

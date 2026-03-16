@@ -1,32 +1,35 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
 import {
-  Alert,
-  KeyboardAvoidingView,
-  NativeSyntheticEvent,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TextInputKeyPressEventData,
-  TouchableOpacity,
-  View
+    Alert,
+    KeyboardAvoidingView,
+    NativeSyntheticEvent,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TextInputKeyPressEventData,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import useAuth from '../hooks/useAuth';
 
 // Define types for component props (if any)
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface LoginScreenProps {}
 
 // Define types for form data
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface LoginFormData {
   email: string;
   password: string;
 }
 
 // Extend TouchableOpacity props for web
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type WebTouchableProps = {
   className?: string;
   type?: 'button' | 'submit' | 'reset';
@@ -36,9 +39,11 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [loginMode, setLoginMode] = useState<'email' | 'phone'>('email');
+  const [phoneNumber, setPhoneNumber] = useState<string>('');
 
   const navigation = useNavigation<any>();
-  const { signIn } = useAuth();
+  const { signIn, sendPhoneOTP } = useAuth();
 
   const handleLogin = async (): Promise<void> => {
     if (!email || !password) {
@@ -61,20 +66,38 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
     navigation.navigate('Register');
   };
 
-  const handleSocialLogin = async (provider: string): Promise<void> => {
+  const handlePhoneLogin = async (): Promise<void> => {
+    if (!phoneNumber.trim()) {
+      Alert.alert('Validation', 'Please enter your phone number');
+      return;
+    }
+
+    // Basic phone number validation (should start with + and have at least 10 digits)
+    const phoneRegex = /^\+\d{10,15}$/;
+    if (!phoneRegex.test(phoneNumber.trim())) {
+      Alert.alert('Validation', 'Please enter a valid phone number in international format (e.g., +1234567890)');
+      return;
+    }
+
     try {
-      // Dummy social login: create a demo email and sign in
-      const demoEmail = `${provider.toLowerCase()}@example.com`;
-      await signIn(demoEmail, 'password');
+      const confirmationResult = await sendPhoneOTP(phoneNumber.trim());
+      navigation.navigate('PhoneOTP', {
+        confirmationResult,
+        phoneNumber: phoneNumber.trim()
+      });
     } catch (err) {
-      Alert.alert('Social login failed', (err as Error).message || 'Unable to sign in');
+      Alert.alert('Failed to send OTP', (err as Error).message || 'Unable to send verification code');
     }
   };
 
   const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>): void => {
     // Handle Enter key for web
     if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter') {
-      handleLogin();
+      if (loginMode === 'email') {
+        handleLogin();
+      } else {
+        handlePhoneLogin();
+      }
     }
   };
 
@@ -127,74 +150,120 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
             <Text style={styles.subtitleText}>Sign in to continue</Text>
           </View>
 
-          <View style={styles.formContainer}>
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your email"
-                placeholderTextColor="#999"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete={Platform.OS === 'web' ? 'email' : 'off'}
-                onKeyPress={handleKeyPress}
-                accessibilityLabel="Email input field"
-                accessibilityHint="Enter your email address"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.passwordContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  placeholder="Enter your password"
-                  placeholderTextColor="#999"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoComplete={Platform.OS === 'web' ? 'current-password' : 'off'}
-                  onKeyPress={handleKeyPress}
-                  accessibilityLabel="Password input field"
-                  accessibilityHint="Enter your password"
-                />
-                <TouchableOpacity
-                  onPress={togglePasswordVisibility}
-                  style={styles.eyeButton}
-                  activeOpacity={0.7}
-                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-                  accessibilityHint="Toggle password visibility"
-                >
-                  <Text style={styles.eyeButtonText}>
-                    {showPassword ? '👁️' : '👁️‍🗨️'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
+          {/* Login Mode Toggle */}
+          <View style={styles.modeToggleContainer}>
             <TouchableOpacity
-              onPress={handleForgotPassword}
-              style={styles.forgotPasswordContainer}
+              style={[styles.modeButton, loginMode === 'email' && styles.modeButtonActive]}
+              onPress={() => setLoginMode('email')}
               activeOpacity={0.7}
-              accessibilityLabel="Forgot password"
-              accessibilityHint="Navigate to password reset"
             >
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              <Text style={[styles.modeButtonText, loginMode === 'email' && styles.modeButtonTextActive]}>
+                Email Login
+              </Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeButton, loginMode === 'phone' && styles.modeButtonActive]}
+              onPress={() => setLoginMode('phone')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.modeButtonText, loginMode === 'phone' && styles.modeButtonTextActive]}>
+                Phone Login
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.formContainer}>
+            {loginMode === 'email' ? (
+              <>
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Email</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter your email"
+                    placeholderTextColor="#999"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete={Platform.OS === 'web' ? 'email' : 'off'}
+                    onKeyPress={handleKeyPress}
+                    accessibilityLabel="Email input field"
+                    accessibilityHint="Enter your email address"
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Password</Text>
+                  <View style={styles.passwordContainer}>
+                    <TextInput
+                      style={styles.passwordInput}
+                      placeholder="Enter your password"
+                      placeholderTextColor="#999"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoComplete={Platform.OS === 'web' ? 'current-password' : 'off'}
+                      onKeyPress={handleKeyPress}
+                      accessibilityLabel="Password input field"
+                      accessibilityHint="Enter your password"
+                    />
+                    <TouchableOpacity
+                      onPress={togglePasswordVisibility}
+                      style={styles.eyeButton}
+                      activeOpacity={0.7}
+                      accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                      accessibilityHint="Toggle password visibility"
+                    >
+                      <Text style={styles.eyeButtonText}>
+                        {showPassword ? '👁️' : '👁️‍🗨️'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  onPress={handleForgotPassword}
+                  style={styles.forgotPasswordContainer}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Forgot password"
+                  accessibilityHint="Navigate to password reset"
+                >
+                  <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Phone Number</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your phone number (e.g., +1234567890)"
+                  placeholderTextColor="#999"
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete={Platform.OS === 'web' ? 'tel' : 'off'}
+                  onKeyPress={handleKeyPress}
+                  accessibilityLabel="Phone number input field"
+                  accessibilityHint="Enter your phone number in international format"
+                />
+              </View>
+            )}
 
             <TouchableOpacity
               style={[styles.loginButton, Platform.OS === 'web' && ({ className: 'login-button' } as any)]}
-              onPress={handleLogin}
+              onPress={loginMode === 'email' ? handleLogin : handlePhoneLogin}
               activeOpacity={0.8}
               {...(Platform.OS === 'web' ? { type: 'button' } : {})}
-              accessibilityLabel="Sign in button"
-              accessibilityHint="Tap to sign in to your account"
+              accessibilityLabel={loginMode === 'email' ? "Sign in button" : "Send OTP button"}
+              accessibilityHint={loginMode === 'email' ? "Tap to sign in to your account" : "Tap to receive verification code"}
             >
-              <Text style={styles.loginButtonText}>Sign In</Text>
+              <Text style={styles.loginButtonText}>
+                {loginMode === 'email' ? 'Sign In' : 'Send OTP'}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -236,7 +305,7 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
             </View>
 
             <View style={styles.signUpContainer}>
-              <Text style={styles.signUpText}>Don't have an account? </Text>
+              <Text style={styles.signUpText}>{'Don\'t have an account? '}</Text>
               <TouchableOpacity 
                 onPress={handleSignUp}
                 activeOpacity={0.7}
@@ -250,6 +319,13 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* reCAPTCHA container for phone authentication */}
+          {Platform.OS === 'web' && (
+            <View style={styles.recaptchaContainer}>
+              <div id="recaptcha-container"></div>
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -291,6 +367,31 @@ const styles = StyleSheet.create({
     fontSize: Platform.OS === 'web' ? 18 : 16,
     color: '#666',
     textAlign: 'center',
+  },
+  modeToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 32,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modeButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  modeButtonTextActive: {
+    color: '#fff',
   },
   formContainer: {
     width: '100%',
@@ -439,6 +540,11 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? {
       cursor: 'pointer',
     } : {}),
+  },
+  recaptchaContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 16,
   },
 });
 

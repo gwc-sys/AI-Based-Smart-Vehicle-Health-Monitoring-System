@@ -18,9 +18,11 @@ import {
 import useAuth from '../hooks/useAuth';
 
 // Define types for component props
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface RegisterScreenProps {}
 
 // Define types for form data
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface RegisterFormData {
   fullName: string;
   email: string;
@@ -28,13 +30,8 @@ interface RegisterFormData {
   confirmPassword: string;
 }
 
-// Email Verification state
-interface VerificationState {
-  isVerifying: boolean;
-  pendingEmail?: string;
-}
-
 // Extend TouchableOpacity props for web
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type WebTouchableProps = {
   className?: string;
   type?: 'button' | 'submit' | 'reset';
@@ -43,21 +40,25 @@ type WebTouchableProps = {
 const RegisterScreen: React.FC<RegisterScreenProps> = () => {
   const [fullName, setFullName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
+  const [phoneNumber, setPhoneNumber] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
   const [agreeToTerms, setAgreeToTerms] = useState<boolean>(false);
-  const [verificationState, setVerificationState] = useState<VerificationState>({ isVerifying: false });
-  const [verificationToken, setVerificationToken] = useState<string>('');
 
   const navigation = useNavigation<any>();
-  const { signUp, verifyEmail, loading } = useAuth();
+  const { loading } = useAuth();
 
   const handleRegister = async (): Promise<void> => {
     // Validation
-    if (!fullName || !email || !password || !confirmPassword) {
+    if (!fullName || !email || !phoneNumber || !password || !confirmPassword) {
       Alert.alert('Validation', 'Please fill in all fields');
+      return;
+    }
+
+    if (!phoneNumber.trim().startsWith('+') || phoneNumber.trim().length < 8) {
+      Alert.alert('Validation', 'Please enter a valid phone number in international format (e.g., +1234567890)');
       return;
     }
 
@@ -77,44 +78,19 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
     }
 
     try {
-      await signUp(fullName, email, password);
-      // Navigate to EmailVerification screen
-      navigation.navigate('EmailVerification', { email: email.trim() });
+      navigation.navigate('PhoneOTP', {
+        phoneNumber: phoneNumber.trim(),
+        fullName: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+      });
     } catch (err) {
-      Alert.alert('Registration failed', (err as Error).message || 'Unable to create account');
-    }
-  };
-
-  const handleVerifyEmail = async (): Promise<void> => {
-    if (!verificationToken.trim()) {
-      Alert.alert('Validation', 'Please enter the verification token');
-      return;
-    }
-
-    try {
-      await verifyEmail(verificationToken.trim());
-      Alert.alert('Success', 'Email verified! You can now login.');
-      // Reset form
-      setFullName('');
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
-      setVerificationToken('');
-      setVerificationState({ isVerifying: false });
-      // Navigate to login
-      navigation.navigate('Login');
-    } catch (err) {
-      Alert.alert('Verification failed', (err as Error).message || 'Unable to verify email');
+      Alert.alert('Error', (err as Error).message || 'Unable to proceed');
     }
   };
 
   const handleLogin = (): void => {
     navigation.navigate('Login');
-  };
-
-  const handleBackToForm = (): void => {
-    setVerificationState({ isVerifying: false });
-    setVerificationToken('');
   };
 
   const handleSocialRegister = async (provider: string): Promise<void> => {
@@ -191,264 +167,225 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
-          {!verificationState.isVerifying ? (
-            <>
-              <View style={styles.headerContainer}>
-                <Text style={styles.welcomeText}>Create Account</Text>
-                <Text style={styles.subtitleText}>Sign up to get started</Text>
-              </View>
+          <View style={styles.headerContainer}>
+            <Text style={styles.welcomeText}>Create Account</Text>
+            <Text style={styles.subtitleText}>Sign up to get started</Text>
+          </View>
 
-              <View style={styles.formContainer}>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Full Name</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter your full name"
-                    placeholderTextColor="#999"
-                    value={fullName}
-                    onChangeText={setFullName}
-                    autoCapitalize="words"
-                    autoCorrect={false}
-                    autoComplete={Platform.OS === 'web' ? 'name' : 'off'}
-                    onKeyPress={handleKeyPress}
-                    accessibilityLabel="Full name input field"
-                    accessibilityHint="Enter your full name"
-                  />
-                </View>
+          <View style={styles.formContainer}>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Full Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your full name"
+                placeholderTextColor="#999"
+                value={fullName}
+                onChangeText={setFullName}
+                autoCapitalize="words"
+                autoCorrect={false}
+                autoComplete={Platform.OS === 'web' ? 'name' : 'off'}
+                onKeyPress={handleKeyPress}
+                accessibilityLabel="Full name input field"
+                accessibilityHint="Enter your full name"
+              />
+            </View>
 
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Email</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter your email"
-                    placeholderTextColor="#999"
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete={Platform.OS === 'web' ? 'email' : 'off'}
-                    onKeyPress={handleKeyPress}
-                    accessibilityLabel="Email input field"
-                    accessibilityHint="Enter your email address"
-                  />
-                </View>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your email"
+                placeholderTextColor="#999"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete={Platform.OS === 'web' ? 'email' : 'off'}
+                onKeyPress={handleKeyPress}
+                accessibilityLabel="Email input field"
+                accessibilityHint="Enter your email address"
+              />
+            </View>
 
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Password</Text>
-                  <View style={styles.passwordContainer}>
-                    <TextInput
-                      style={styles.passwordInput}
-                      placeholder="Enter your password"
-                      placeholderTextColor="#999"
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry={!showPassword}
-                      autoCapitalize="none"
-                      autoComplete={Platform.OS === 'web' ? 'new-password' : 'off'}
-                      onKeyPress={handleKeyPress}
-                      accessibilityLabel="Password input field"
-                      accessibilityHint="Enter your password"
-                    />
-                    <TouchableOpacity
-                      onPress={togglePasswordVisibility}
-                      style={styles.eyeButton}
-                      activeOpacity={0.7}
-                      accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-                      accessibilityHint="Toggle password visibility"
-                    >
-                      <Text style={styles.eyeButtonText}>
-                        {showPassword ? '👁️' : '👁️‍🗨️'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Mobile Number</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your phone number (+1234567890)"
+                placeholderTextColor="#999"
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                keyboardType="phone-pad"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete={Platform.OS === 'web' ? 'tel' : 'off'}
+                onKeyPress={handleKeyPress}
+                accessibilityLabel="Phone number input field"
+                accessibilityHint="Enter your phone number in international format"
+              />
+            </View>
 
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Confirm Password</Text>
-                  <View style={styles.passwordContainer}>
-                    <TextInput
-                      style={styles.passwordInput}
-                      placeholder="Confirm your password"
-                      placeholderTextColor="#999"
-                      value={confirmPassword}
-                      onChangeText={setConfirmPassword}
-                      secureTextEntry={!showConfirmPassword}
-                      autoCapitalize="none"
-                      autoComplete={Platform.OS === 'web' ? 'new-password' : 'off'}
-                      onKeyPress={handleKeyPress}
-                      accessibilityLabel="Confirm password input field"
-                      accessibilityHint="Re-enter your password"
-                    />
-                    <TouchableOpacity
-                      onPress={toggleConfirmPasswordVisibility}
-                      style={styles.eyeButton}
-                      activeOpacity={0.7}
-                      accessibilityLabel={showConfirmPassword ? "Hide password" : "Show password"}
-                      accessibilityHint="Toggle password visibility"
-                    >
-                      <Text style={styles.eyeButtonText}>
-                        {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <View style={styles.termsContainer}>
-                  <TouchableOpacity
-                    onPress={toggleTermsAgreement}
-                    style={styles.checkbox}
-                    activeOpacity={0.7}
-                    accessibilityLabel="Terms and conditions checkbox"
-                    accessibilityHint="Agree to terms and conditions"
-                  >
-                    <View style={[styles.checkboxInner, agreeToTerms && styles.checkboxChecked]}>
-                      {agreeToTerms && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                  </TouchableOpacity>
-                  <Text style={styles.termsText}>
-                    I agree to the{' '}
-                    <Text 
-                      style={[styles.termsLink, Platform.OS === 'web' && ({ className: 'terms-link' } as any)]}
-                      onPress={() => Alert.alert('Terms', 'Terms and conditions would be shown here')}
-                    >
-                      Terms of Service
-                    </Text>{' '}
-                    and{' '}
-                    <Text 
-                      style={[styles.termsLink, Platform.OS === 'web' && ({ className: 'terms-link' } as any)]}
-                      onPress={() => Alert.alert('Privacy', 'Privacy policy would be shown here')}
-                    >
-                      Privacy Policy
-                    </Text>
-                  </Text>
-                </View>
-
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="Enter your password"
+                  placeholderTextColor="#999"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoComplete={Platform.OS === 'web' ? 'new-password' : 'off'}
+                  onKeyPress={handleKeyPress}
+                  accessibilityLabel="Password input field"
+                  accessibilityHint="Enter your password"
+                />
                 <TouchableOpacity
-                  style={[styles.registerButton, Platform.OS === 'web' && ({ className: 'register-button' } as any)]}
-                  onPress={handleRegister}
-                  activeOpacity={0.8}
-                  {...(Platform.OS === 'web' ? { type: 'button' } : {})}
-                  accessibilityLabel="Sign up button"
-                  accessibilityHint="Tap to create your account"
+                  onPress={togglePasswordVisibility}
+                  style={styles.eyeButton}
+                  activeOpacity={0.7}
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                  accessibilityHint="Toggle password visibility"
                 >
-                  <Text style={styles.registerButtonText}>Sign Up</Text>
+                  <Text style={styles.eyeButtonText}>
+                    {showPassword ? '👁️' : '👁️‍🗨️'}
+                  </Text>
                 </TouchableOpacity>
               </View>
+            </View>
 
-              <View style={styles.footerContainer}>
-                <View style={styles.dividerContainer}>
-                  <View style={styles.divider} />
-                  <Text style={styles.dividerText}>OR</Text>
-                  <View style={styles.divider} />
-                </View>
-
-                <View style={styles.socialButtonsContainer}>
-                  <TouchableOpacity 
-                    style={[styles.socialButton, Platform.OS === 'web' && ({ className: 'social-button' } as any)]}
-                    onPress={() => handleSocialRegister('Google')}
-                    activeOpacity={0.7}
-                    {...(Platform.OS === 'web' ? { type: 'button' } : {})}
-                    accessibilityLabel="Sign up with Google"
-                    accessibilityHint="Continue with Google"
-                  >
-                    <Text style={styles.socialButtonText}>G</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.socialButton, Platform.OS === 'web' && ({ className: 'social-button' } as any)]}
-                    onPress={() => handleSocialRegister('Facebook')}
-                    activeOpacity={0.7}
-                    {...(Platform.OS === 'web' ? { type: 'button' } : {})}
-                    accessibilityLabel="Sign up with Facebook"
-                    accessibilityHint="Continue with Facebook"
-                  >
-                    <Text style={styles.socialButtonText}>f</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.socialButton, Platform.OS === 'web' && ({ className: 'social-button' } as any)]}
-                    onPress={() => handleSocialRegister('LinkedIn')}
-                    activeOpacity={0.7}
-                    {...(Platform.OS === 'web' ? { type: 'button' } : {})}
-                    accessibilityLabel="Sign up with LinkedIn"
-                    accessibilityHint="Continue with LinkedIn"
-                  >
-                    <Text style={styles.socialButtonText}>in</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.loginContainer}>
-                  <Text style={styles.loginText}>Already have an account? </Text>
-                  <TouchableOpacity 
-                    onPress={handleLogin}
-                    activeOpacity={0.7}
-                    {...(Platform.OS === 'web' ? { type: 'button' } : {})}
-                    accessibilityLabel="Sign in"
-                    accessibilityHint="Navigate to sign in page"
-                  >
-                    <Text style={[styles.loginLink, Platform.OS === 'web' && ({ className: 'login-link' } as any)]}>
-                      Sign In
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="Confirm your password"
+                  placeholderTextColor="#999"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                  autoCapitalize="none"
+                  autoComplete={Platform.OS === 'web' ? 'new-password' : 'off'}
+                  onKeyPress={handleKeyPress}
+                  accessibilityLabel="Confirm password input field"
+                  accessibilityHint="Re-enter your password"
+                />
+                <TouchableOpacity
+                  onPress={toggleConfirmPasswordVisibility}
+                  style={styles.eyeButton}
+                  activeOpacity={0.7}
+                  accessibilityLabel={showConfirmPassword ? "Hide password" : "Show password"}
+                  accessibilityHint="Toggle password visibility"
+                >
+                  <Text style={styles.eyeButtonText}>
+                    {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
+                  </Text>
+                </TouchableOpacity>
               </View>
-            </>
-          ) : (
-            <>
-              <View style={styles.headerContainer}>
-                <Text style={styles.welcomeText}>Verify Email</Text>
-                <Text style={styles.subtitleText}>Enter the verification code sent to your email</Text>
-              </View>
+            </View>
 
-              <View style={styles.verificationInfoContainer}>
-                <Text style={styles.verificationInfoText}>
-                  We've sent a verification code to {verificationState.pendingEmail}
+            <View style={styles.termsContainer}>
+              <TouchableOpacity
+                onPress={toggleTermsAgreement}
+                style={styles.checkbox}
+                activeOpacity={0.7}
+                accessibilityLabel="Terms and conditions checkbox"
+                accessibilityHint="Agree to terms and conditions"
+              >
+                <View style={[styles.checkboxInner, agreeToTerms && styles.checkboxChecked]}>
+                  {agreeToTerms && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.termsText}>
+                I agree to the{' '}
+                <Text 
+                  style={[styles.termsLink, Platform.OS === 'web' && ({ className: 'terms-link' } as any)]}
+                  onPress={() => Alert.alert('Terms', 'Terms and conditions would be shown here')}
+                >
+                  Terms of Service
+                </Text>{' '}
+                and{' '}
+                <Text 
+                  style={[styles.termsLink, Platform.OS === 'web' && ({ className: 'terms-link' } as any)]}
+                  onPress={() => Alert.alert('Privacy', 'Privacy policy would be shown here')}
+                >
+                  Privacy Policy
                 </Text>
-              </View>
+              </Text>
+            </View>
 
-              <View style={styles.formContainer}>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Verification Code</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter verification code"
-                    placeholderTextColor="#999"
-                    value={verificationToken}
-                    onChangeText={setVerificationToken}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="default"
-                    onKeyPress={handleKeyPress}
-                    accessibilityLabel="Verification code input field"
-                    accessibilityHint="Enter the code from your email"
-                  />
-                </View>
+            <TouchableOpacity
+              style={[styles.registerButton, Platform.OS === 'web' && ({ className: 'register-button' } as any)]}
+              onPress={handleRegister}
+              activeOpacity={0.8}
+              disabled={loading}
+              {...(Platform.OS === 'web' ? { type: 'button' } : {})}
+              accessibilityLabel="Sign up button"
+              accessibilityHint="Tap to create your account"
+            >
+              <Text style={styles.registerButtonText}>
+                {loading ? 'Creating Account...' : 'Sign Up'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-                <TouchableOpacity
-                  style={[styles.registerButton, Platform.OS === 'web' && ({ className: 'register-button' } as any)]}
-                  onPress={handleVerifyEmail}
-                  activeOpacity={0.8}
-                  disabled={loading}
-                  {...(Platform.OS === 'web' ? { type: 'button' } : {})}
-                  accessibilityLabel="Verify email button"
-                  accessibilityHint="Tap to verify your email"
-                >
-                  <Text style={styles.registerButtonText}>
-                    {loading ? 'Verifying...' : 'Verify Email'}
-                  </Text>
-                </TouchableOpacity>
+          <View style={styles.footerContainer}>
+            <View style={styles.dividerContainer}>
+              <View style={styles.divider} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.divider} />
+            </View>
 
-                <TouchableOpacity
-                  style={styles.backButton}
-                  onPress={handleBackToForm}
-                  {...(Platform.OS === 'web' ? { type: 'button' } : {})}
-                  accessibilityLabel="Back button"
-                  accessibilityHint="Return to registration form"
-                >
-                  <Text style={styles.backButtonText}>Back to Registration</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
+            <View style={styles.socialButtonsContainer}>
+              <TouchableOpacity 
+                style={[styles.socialButton, Platform.OS === 'web' && ({ className: 'social-button' } as any)]}
+                onPress={() => handleSocialRegister('Google')}
+                activeOpacity={0.7}
+                {...(Platform.OS === 'web' ? { type: 'button' } : {})}
+                accessibilityLabel="Sign up with Google"
+                accessibilityHint="Continue with Google"
+              >
+                <Text style={styles.socialButtonText}>G</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.socialButton, Platform.OS === 'web' && ({ className: 'social-button' } as any)]}
+                onPress={() => handleSocialRegister('Facebook')}
+                activeOpacity={0.7}
+                {...(Platform.OS === 'web' ? { type: 'button' } : {})}
+                accessibilityLabel="Sign up with Facebook"
+                accessibilityHint="Continue with Facebook"
+              >
+                <Text style={styles.socialButtonText}>f</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.socialButton, Platform.OS === 'web' && ({ className: 'social-button' } as any)]}
+                onPress={() => handleSocialRegister('LinkedIn')}
+                activeOpacity={0.7}
+                {...(Platform.OS === 'web' ? { type: 'button' } : {})}
+                accessibilityLabel="Sign up with LinkedIn"
+                accessibilityHint="Continue with LinkedIn"
+              >
+                <Text style={styles.socialButtonText}>in</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.loginContainer}>
+              <Text style={styles.loginText}>Already have an account? </Text>
+              <TouchableOpacity 
+                onPress={handleLogin}
+                activeOpacity={0.7}
+                {...(Platform.OS === 'web' ? { type: 'button' } : {})}
+                accessibilityLabel="Sign in"
+                accessibilityHint="Navigate to sign in page"
+              >
+                <Text style={[styles.loginLink, Platform.OS === 'web' && ({ className: 'login-link' } as any)]}>
+                  Sign In
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -489,6 +426,12 @@ const styles = StyleSheet.create({
     fontSize: Platform.OS === 'web' ? 18 : 16,
     color: '#666',
     textAlign: 'center',
+  },
+  noticeText: {
+    fontSize: 14,
+    color: '#d32f2f',
+    textAlign: 'center',
+    marginTop: 8,
   },
   formContainer: {
     width: '100%',

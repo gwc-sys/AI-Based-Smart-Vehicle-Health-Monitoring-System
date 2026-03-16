@@ -1,4 +1,4 @@
-import usePrediction from '@/hooks/usePrediction';
+import { usePrediction } from '@/hooks/usePrediction';
 import { useVehicleData } from '@/hooks/useVehicleData';
 import React, { useState } from 'react';
 import {

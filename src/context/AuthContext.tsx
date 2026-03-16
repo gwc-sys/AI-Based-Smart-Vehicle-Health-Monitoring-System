@@ -1,15 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    applyActionCode,
     createUserWithEmailAndPassword,
     signOut as firebaseSignOut,
     getAuth,
+    linkWithCredential,
     onAuthStateChanged,
+    PhoneAuthProvider,
     signInWithEmailAndPassword,
     updateProfile,
 } from 'firebase/auth';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import { firebaseEmailVerification, initFirebase } from '../services/firebaseConfig';
+import { firebasePhoneAuth, initFirebase } from '../services/firebaseConfig';
 
 // helper to convert Firebase user to our local User type
 function mapFirebaseUser(fu: any): User {
@@ -17,7 +18,7 @@ function mapFirebaseUser(fu: any): User {
     id: fu.uid,
     name: fu.displayName || '',
     email: fu.email || '',
-    emailVerified: fu.emailVerified,
+    phone: fu.phoneNumber || '',
     createdAt: fu.metadata?.creationTime,
   };
 }
@@ -27,7 +28,6 @@ type User = {
   name: string;
   email: string;
   phone?: string;
-  emailVerified?: boolean;
   createdAt?: string;
 };
 
@@ -38,11 +38,19 @@ type AuthContextType = {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
+  signUpWithPhoneVerification: (
+    name: string,
+    email: string,
+    password: string,
+    phoneNumber: string,
+    confirmationResult: any,
+    otpCode: string
+  ) => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
   updateUserProfile: (data: Partial<User>) => Promise<void>;
   updateUserPreferences: (prefs: any) => Promise<void>;
-  sendVerificationEmail: (email?: string) => Promise<void>;
-  verifyEmail: (token: string) => Promise<void>;
+  sendPhoneOTP: (phoneNumber: string, verifier?: any) => Promise<any>;
+  verifyPhoneOTP: (confirmationResult: any, otpCode: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -109,10 +117,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const auth = getAuth();
       const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
       const firebaseUser = credential.user;
-      // check email verified
-      if (firebaseUser && !firebaseUser.emailVerified) {
-        throw new Error('Please verify your email address before logging in');
-      }
       if (firebaseUser) {
         const mapped = mapFirebaseUser(firebaseUser);
         await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
@@ -160,8 +164,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(mapped);
         await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
       }
-      // send verification link to the newly created (and still-signed-in) user
-      await firebaseEmailVerification.sendVerificationEmail();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Registration failed';
+      setError(msg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signUpWithPhoneVerification = async (
+    name: string,
+    email: string,
+    password: string,
+    phoneNumber: string,
+    confirmationResult: any,
+    otpCode: string
+  ) => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (!name.trim() || !email.trim() || !password || !phoneNumber.trim()) {
+        throw new Error('All fields are required');
+      }
+      if (password.length < 8) throw new Error('Password must be at least 8 characters long');
+      if (!email.includes('@') || !email.includes('.')) throw new Error('Please enter a valid email address');
+
+      initFirebase();
+      const auth = getAuth();
+
+      // Create user account with email/password first
+      const credential = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+      const firebaseUser = credential.user;
+
+      // Link the phone number to the newly created account using the OTP verification
+      const phoneCredential = PhoneAuthProvider.credential(confirmationResult.verificationId, otpCode);
+      await linkWithCredential(firebaseUser, phoneCredential);
+
+      if (firebaseUser) {
+        await updateProfile(firebaseUser, { displayName: name.trim() });
+        const mapped = mapFirebaseUser(firebaseUser);
+        setUser(mapped);
+        await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Registration failed';
       setError(msg);
@@ -198,13 +243,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const sendVerificationEmail = async (email?: string) => {
+  const sendPhoneOTP = async (phoneNumber: string, verifier?: any) => {
     setLoading(true);
     setError(null);
     try {
-      await firebaseEmailVerification.sendVerificationEmail();
+      const confirmationResult = await firebasePhoneAuth.sendOTP(phoneNumber, verifier);
+      return confirmationResult;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to send verification email';
+      const msg = err instanceof Error ? err.message : 'Failed to send OTP';
       setError(msg);
       throw err;
     } finally {
@@ -212,26 +258,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const verifyEmail = async (token: string) => {
+  const verifyPhoneOTP = async (confirmationResult: any, otpCode: string) => {
     setLoading(true);
     setError(null);
     try {
-      // token is expected to be the Firebase action code (oobCode)
-      initFirebase();
-      const auth = getAuth();
-      if (token) {
-        await applyActionCode(auth, token);
-        // reload user to reflect verified status
-        const firebaseUser = auth.currentUser;
-        if (firebaseUser) {
-          await firebaseUser.reload();
-          const mapped = mapFirebaseUser(firebaseUser);
-          setUser(mapped);
-          await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
-        }
+      const result = await firebasePhoneAuth.verifyOTP(confirmationResult, otpCode);
+      const firebaseUser = result.user;
+      if (firebaseUser) {
+        const mapped = mapFirebaseUser(firebaseUser);
+        await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
+        setUser(mapped);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Email verification failed';
+      const msg = err instanceof Error ? err.message : 'OTP verification failed';
       setError(msg);
       throw err;
     } finally {
@@ -248,11 +287,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         signIn,
         signOut,
         signUp,
+        signUpWithPhoneVerification,
         updateUser,
         updateUserProfile,
         updateUserPreferences,
-        sendVerificationEmail,
-        verifyEmail,
+        sendPhoneOTP,
+        verifyPhoneOTP,
       }}
     >
       {children}

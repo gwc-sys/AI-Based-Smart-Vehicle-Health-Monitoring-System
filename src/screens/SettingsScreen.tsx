@@ -32,7 +32,7 @@ export default function SettingsScreen() {
     setPrefs(next);
     try {
       updateUserPreferences(next);
-    } catch (err) {
+    } catch {
       Alert.alert('Error', 'Failed to save preferences');
     }
   };

@@ -7,21 +7,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Linking,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Linking,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    Share,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { Colors } from '../../constants/theme';
 
@@ -49,7 +49,6 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -66,43 +65,43 @@ export default function ProfileScreen() {
     maintenanceAlerts: 0,
   });
 
-  useEffect(() => {
-    loadUserPreferences();
-    loadUserStats();
-    loadProfileImage();
-  }, []);
-
-  const loadUserPreferences = async () => {
+  const loadUserPreferences = useCallback(async () => {
     try {
       const savedPrefs = await AsyncStorage.getItem('userPreferences');
       if (savedPrefs) {
         setPreferences(JSON.parse(savedPrefs));
       }
-    } catch (error) {
-      console.error('Error loading preferences:', error);
+    } catch {
+      console.error('Error loading preferences');
     }
-  };
+  }, []);
 
-  const loadUserStats = async () => {
+  const loadUserStats = useCallback(async () => {
     try {
       // Fetch real stats from your backend/API
       const stats = await fetchUserStats(user?.id ?? '');
       setUserStats(stats);
-    } catch (error) {
-      console.error('Error loading user stats:', error);
+    } catch {
+      console.error('Error loading user stats');
     }
-  };
+  }, [user?.id]);
 
-  const loadProfileImage = async () => {
+  const loadProfileImage = useCallback(async () => {
     try {
       const savedImage = await AsyncStorage.getItem(`profileImage_${user?.id}`);
       if (savedImage) {
         setProfileImage(savedImage);
       }
-    } catch (error) {
-      console.error('Error loading profile image:', error);
+    } catch {
+      console.error('Error loading profile image');
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    loadUserPreferences();
+    loadUserStats();
+    loadProfileImage();
+  }, [loadUserPreferences, loadUserStats, loadProfileImage]);
 
   const fetchUserStats = async (userId?: string) => {
     // Simulated API call - replace with actual API
@@ -161,12 +160,12 @@ export default function ProfileScreen() {
     try {
       await refresh();
       await loadUserStats();
-    } catch (error) {
+    } catch {
       Alert.alert('Refresh Failed', 'Unable to refresh data');
     } finally {
       setRefreshing(false);
     }
-  }, [refresh]);
+  }, [refresh, loadUserStats]);
 
   const handleEditProfile = () => {
     setEditName(user?.name || '');
@@ -184,7 +183,7 @@ export default function ProfileScreen() {
       await trackEvent('profile_updated', { userId: user?.id });
       setShowEditModal(false);
       Alert.alert('Success', 'Profile updated successfully');
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to update profile');
     } finally {
       setLoading(false);
@@ -212,7 +211,7 @@ export default function ProfileScreen() {
         await AsyncStorage.setItem(`profileImage_${user?.id}`, imageUri);
         await trackEvent('profile_image_updated', { userId: user?.id });
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to pick image');
     }
   };
@@ -233,7 +232,7 @@ export default function ProfileScreen() {
         url: 'https://yourapp.com/profile',
         title: 'My Vehicle Profile',
       });
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to share profile');
     }
   };
@@ -257,7 +256,7 @@ export default function ProfileScreen() {
               // Implement account deletion logic
               await trackEvent('account_deleted', { userId: user?.id });
               await signOut(); // Placeholder for actual deletion
-            } catch (error) {
+            } catch {
               Alert.alert('Error', 'Failed to delete account');
             } finally {
               setLoading(false);
@@ -350,11 +349,10 @@ export default function ProfileScreen() {
             <InfoRow icon="person" label="Full Name" value={user?.name || 'N/A'} />
             <InfoRow icon="mail" label="Email" value={user?.email || 'N/A'} />
             <InfoRow icon="call" label="Phone" value={user?.phone || 'Not provided'} />
-            <InfoRow icon="checkmark-circle" label="Verified" value={user?.emailVerified ? 'Yes' : 'No'} />
             <InfoRow 
               icon="calendar" 
               label="Member since" 
-              value={user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'} 
+              value={user?.createdAt ? new Date(user?.createdAt).toLocaleDateString() : 'Unknown'} 
             />
             <InfoRow 
               icon="car" 

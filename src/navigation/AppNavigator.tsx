@@ -22,9 +22,12 @@ export default function AppNavigator() {
     return <SplashScreen />;
   }
 
+  // treat user as authenticated if they exist
+  const isAuthenticated = !!user;
+
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (
+      {isAuthenticated ? (
         <RootStack.Screen name="MainApp" component={BottomTabNavigator} />
       ) : (
         <RootStack.Screen name="Auth" component={AuthNavigator} />

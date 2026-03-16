@@ -15,7 +15,7 @@ export function noop() {
 export function safeParseJSON<T = any>(text: string, fallback: T | null = null): T | null {
   try {
     return JSON.parse(text) as T;
-  } catch (e) {
+  } catch {
     return fallback;
   }
 }

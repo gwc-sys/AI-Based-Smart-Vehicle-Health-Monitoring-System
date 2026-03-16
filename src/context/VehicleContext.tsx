@@ -1,4 +1,4 @@
-import vehicleService, { Vehicle } from '@/services/vehicleService';
+import { getVehicles, Vehicle } from '@/services/vehicleService';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
 type VehicleContextType = {
@@ -19,9 +19,9 @@ export const VehicleProvider = ({ children }: { children: ReactNode }) => {
   async function refresh() {
     setLoading(true);
     try {
-      const data = await vehicleService.getVehicles();
+      const data = await getVehicles();
       setVehicles(data);
-    } catch (err) {
+    } catch {
       // swallow for now; consider reporting error
     } finally {
       setLoading(false);

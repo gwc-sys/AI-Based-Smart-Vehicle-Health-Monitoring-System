@@ -41,6 +41,7 @@ const SplashScreen: React.FC = () => {
       cancelAnimation(scale);
       cancelAnimation(loaderProgress);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const animatedCarStyle = useAnimatedStyle(() => ({
