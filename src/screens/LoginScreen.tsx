@@ -80,9 +80,9 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
     }
 
     try {
-      const confirmationResult = await sendPhoneOTP(phoneNumber.trim());
+      const { verificationId } = await sendPhoneOTP(phoneNumber.trim());
       navigation.navigate('PhoneOTP', {
-        confirmationResult,
+        verificationId,
         phoneNumber: phoneNumber.trim()
       });
     } catch (err) {

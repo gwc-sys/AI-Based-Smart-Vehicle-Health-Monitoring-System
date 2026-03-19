@@ -23,10 +23,13 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const [otpCode, setOtpCode] = useState<string>('');
   const [resendTimer, setResendTimer] = useState<number>(30);
   const [canResend, setCanResend] = useState<boolean>(false);
+  const [isSendingOtp, setIsSendingOtp] = useState<boolean>(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
+  const [isRecaptchaReady, setIsRecaptchaReady] = useState<boolean>(Platform.OS === 'web');
 
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { signUpWithPhoneVerification, sendPhoneOTP, loading } = useAuth();
+  const { signUpWithPhoneVerification, sendPhoneOTP, verifyPhoneOTP } = useAuth();
 
   const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
   const usesNativeRecaptcha = Platform.OS !== 'web';
@@ -35,7 +38,7 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const fullName = route.params?.fullName;
   const email = route.params?.email;
   const password = route.params?.password;
-  const confirmationResult = route.params?.confirmationResult;
+  const verificationId = route.params?.verificationId;
   const isRegistrationFlow = !!(fullName && email && password);
 
   const navigateBackSafely = useCallback(() => {
@@ -59,16 +62,17 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   useEffect(() => {
     const sendInitialOTP = async () => {
       if (!phoneNumber) return;
-      if (usesNativeRecaptcha && !recaptchaVerifier.current) return;
+      if (usesNativeRecaptcha && (!isRecaptchaReady || !recaptchaVerifier.current)) return;
 
+      setIsSendingOtp(true);
       try {
-        const confirmationResult = await sendPhoneOTP(
+        const { verificationId } = await sendPhoneOTP(
           phoneNumber,
           usesNativeRecaptcha ? recaptchaVerifier.current : undefined,
         );
         // Update the route params with confirmation result
         navigation.setParams({
-          confirmationResult,
+          verificationId,
           phoneNumber,
           fullName,
           email,
@@ -77,21 +81,24 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
       } catch (err) {
         Alert.alert('Failed to send OTP', (err as Error).message || 'Unable to send OTP');
         navigateBackSafely();
+      } finally {
+        setIsSendingOtp(false);
       }
     };
 
-    if (phoneNumber && !confirmationResult) {
+    if (phoneNumber && !verificationId) {
       sendInitialOTP();
     }
   }, [
     phoneNumber,
-    confirmationResult,
+    verificationId,
     sendPhoneOTP,
     navigation,
     fullName,
     email,
     password,
     usesNativeRecaptcha,
+    isRecaptchaReady,
     navigateBackSafely,
   ]);
 
@@ -101,31 +108,39 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
       return;
     }
 
-    if (!confirmationResult) {
+    if (!verificationId) {
       Alert.alert('Error', 'OTP verification session expired. Please try again.');
       navigateBackSafely();
       return;
     }
 
-    if (!fullName || !email || !password) {
-      Alert.alert('Error', 'Registration details are missing. Please start again.');
-      navigation.navigate('Register');
-      return;
-    }
-
     try {
-      await signUpWithPhoneVerification(
-        fullName,
-        email,
-        password,
-        phoneNumber,
-        confirmationResult,
-        otpCode.trim(),
-      );
-      Alert.alert('Success', 'Account created and phone verified successfully!');
+      setIsVerifyingOtp(true);
+      if (isRegistrationFlow) {
+        if (!fullName || !email || !password) {
+          Alert.alert('Error', 'Registration details are missing. Please start again.');
+          navigation.navigate('Register');
+          return;
+        }
+
+        await signUpWithPhoneVerification(
+          fullName,
+          email,
+          password,
+          phoneNumber,
+          verificationId,
+          otpCode.trim(),
+        );
+        Alert.alert('Success', 'Account created and phone verified successfully!');
+      } else {
+        await verifyPhoneOTP(verificationId, otpCode.trim());
+        Alert.alert('Success', 'Phone number verified successfully!');
+      }
       // Navigation will be handled automatically by auth state changes
     } catch (err) {
       Alert.alert('Verification failed', (err as Error).message || 'Unable to verify OTP');
+    } finally {
+      setIsVerifyingOtp(false);
     }
   };
 
@@ -133,8 +148,9 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
     if (!canResend || !phoneNumber) return;
     if (usesNativeRecaptcha && !recaptchaVerifier.current) return;
 
+    setIsSendingOtp(true);
     try {
-      const newConfirmationResult = await sendPhoneOTP(
+      const { verificationId } = await sendPhoneOTP(
         phoneNumber,
         usesNativeRecaptcha ? recaptchaVerifier.current : undefined,
       );
@@ -143,7 +159,7 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
       setOtpCode('');
       // Update the route params with new confirmation result
       navigation.setParams({
-        confirmationResult: newConfirmationResult,
+        verificationId,
         phoneNumber: phoneNumber,
         fullName,
         email,
@@ -152,6 +168,8 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
       Alert.alert('Success', 'OTP sent successfully!');
     } catch (err) {
       Alert.alert('Failed to resend OTP', (err as Error).message || 'Unable to send OTP');
+    } finally {
+      setIsSendingOtp(false);
     }
   };
 
@@ -199,15 +217,15 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
             </View>
 
             <TouchableOpacity
-              style={[styles.verifyButton, loading && styles.buttonDisabled]}
+              style={[styles.verifyButton, isVerifyingOtp && styles.buttonDisabled]}
               onPress={handleVerifyOTP}
               activeOpacity={0.8}
-              disabled={loading || otpCode.length !== 6}
+              disabled={isVerifyingOtp || isSendingOtp || otpCode.length !== 6}
               accessibilityLabel="Verify OTP button"
               accessibilityHint="Tap to verify your phone number"
             >
               <Text style={styles.verifyButtonText}>
-                {loading ? 'Verifying...' : 'Verify OTP'}
+                {isVerifyingOtp ? 'Verifying...' : 'Verify OTP'}
               </Text>
             </TouchableOpacity>
 
@@ -219,10 +237,13 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
                 <TouchableOpacity
                   onPress={handleResendOTP}
                   activeOpacity={0.7}
+                  disabled={isSendingOtp || isVerifyingOtp}
                   accessibilityLabel="Resend OTP"
                   accessibilityHint="Send a new verification code"
                 >
-                  <Text style={styles.resendLink}>Resend OTP</Text>
+                  <Text style={styles.resendLink}>
+                    {isSendingOtp ? 'Sending...' : 'Resend OTP'}
+                  </Text>
                 </TouchableOpacity>
               ) : (
                 <Text style={styles.resendTimer}>
@@ -246,7 +267,10 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
         {/* Firebase reCAPTCHA Verifier Modal for mobile */}
         {usesNativeRecaptcha && (
           <FirebaseRecaptchaVerifierModal
-            ref={recaptchaVerifier}
+            ref={(instance) => {
+              recaptchaVerifier.current = instance;
+              setIsRecaptchaReady(!!instance);
+            }}
             firebaseConfig={firebaseConfig}
             attemptInvisibleVerification={true}
           />

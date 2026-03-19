@@ -16,7 +16,7 @@ export type AuthStackParamList = {
     | undefined;
   PhoneOTP:
     | {
-        confirmationResult?: any;
+        verificationId?: string;
         phoneNumber?: string;
         fullName?: string;
         email?: string;

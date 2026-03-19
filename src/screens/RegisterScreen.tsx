@@ -46,10 +46,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
   const [agreeToTerms, setAgreeToTerms] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { loading } = useAuth();
+  useAuth();
 
   // Handle route params from legal pages
   useEffect(() => {
@@ -88,6 +89,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
     }
 
     try {
+      setIsSubmitting(true);
       navigation.navigate('PhoneOTP', {
         phoneNumber: phoneNumber.trim(),
         fullName: fullName.trim(),
@@ -96,6 +98,8 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
       });
     } catch (err) {
       Alert.alert('Error', (err as Error).message || 'Unable to proceed');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -334,13 +338,13 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
               style={[styles.registerButton, Platform.OS === 'web' && ({ className: 'register-button' } as any)]}
               onPress={handleRegister}
               activeOpacity={0.8}
-              disabled={loading}
+              disabled={isSubmitting}
               {...(Platform.OS === 'web' ? { type: 'button' } : {})}
               accessibilityLabel="Sign up button"
               accessibilityHint="Tap to create your account"
             >
               <Text style={styles.registerButtonText}>
-                {loading ? 'Creating Account...' : 'Sign Up'}
+                {isSubmitting ? 'Please wait...' : 'Sign Up'}
               </Text>
             </TouchableOpacity>
           </View>

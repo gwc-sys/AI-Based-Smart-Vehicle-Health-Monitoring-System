@@ -4,6 +4,7 @@ import useAuth from '../hooks/useAuth';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import SplashScreen from '../screens/SplashScreen';
 import TermsOfServiceScreen from '../screens/TermsOfServiceScreen';
+import VehicleDetailScreen from '../screens/VehicleDetailScreen';
 import AuthNavigator from './AuthNavigator';
 import BottomTabNavigator from './BottomTabNavigator';
 
@@ -36,6 +37,7 @@ export default function AppNavigator() {
       )}
       <RootStack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
       <RootStack.Screen name="TermsOfService" component={TermsOfServiceScreen} />
+      <RootStack.Screen name="VehicleDetail" component={VehicleDetailScreen} />
     </RootStack.Navigator>
   );
 }

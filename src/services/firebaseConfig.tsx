@@ -12,9 +12,10 @@ import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
  * Ensure you have `firebase` installed (e.g. `npm install firebase`).
  */
 import {
-    ConfirmationResult,
     getAuth,
     RecaptchaVerifier,
+    signInWithCredential,
+    PhoneAuthProvider,
     signInWithPhoneNumber
 } from 'firebase/auth';
 import { Env } from '../config/env';
@@ -155,7 +156,7 @@ export const firebasePhoneAuth = {
    * @example
    * const confirmationResult = await firebasePhoneAuth.sendOTP('+1234567890', verifier);
    */
-  sendOTP: async (phoneNumber: string, verifier?: any): Promise<ConfirmationResult> => {
+  sendOTP: async (phoneNumber: string, verifier?: any): Promise<{ verificationId: string }> => {
     try {
       const auth = getAuth(getFirebaseApp());
 
@@ -171,7 +172,7 @@ export const firebasePhoneAuth = {
       }
 
       const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
-      return confirmationResult;
+      return { verificationId: confirmationResult.verificationId };
     } catch (error: any) {
       if (typeof window !== 'undefined' && !verifier) {
         try {
@@ -201,15 +202,17 @@ export const firebasePhoneAuth = {
 
   /**
    * Verify OTP code
-   * @param confirmationResult - The confirmation result from sendOTP
+   * @param verificationId - The verification id returned from sendOTP
    * @param otpCode - The 6-digit OTP code
    * @returns Promise<any> - User credential
    * @example
-   * const userCredential = await firebasePhoneAuth.verifyOTP(confirmationResult, '123456');
+   * const userCredential = await firebasePhoneAuth.verifyOTP(verificationId, '123456');
    */
-  verifyOTP: async (confirmationResult: ConfirmationResult, otpCode: string): Promise<any> => {
+  verifyOTP: async (verificationId: string, otpCode: string): Promise<any> => {
     try {
-      const result = await confirmationResult.confirm(otpCode);
+      const auth = getAuth(getFirebaseApp());
+      const credential = PhoneAuthProvider.credential(verificationId, otpCode);
+      const result = await signInWithCredential(auth, credential);
       return result;
     } catch (error: any) {
       throw new Error(`Failed to verify OTP: ${error.message}`);

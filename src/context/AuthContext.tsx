@@ -44,14 +44,14 @@ type AuthContextType = {
     email: string,
     password: string,
     phoneNumber: string,
-    confirmationResult: any,
+    verificationId: string,
     otpCode: string
   ) => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
   updateUserProfile: (data: Partial<User>) => Promise<void>;
   updateUserPreferences: (prefs: any) => Promise<void>;
-  sendPhoneOTP: (phoneNumber: string, verifier?: any) => Promise<any>;
-  verifyPhoneOTP: (confirmationResult: any, otpCode: string) => Promise<void>;
+  sendPhoneOTP: (phoneNumber: string, verifier?: any) => Promise<{ verificationId: string }>;
+  verifyPhoneOTP: (verificationId: string, otpCode: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -173,7 +173,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     email: string,
     password: string,
     phoneNumber: string,
-    confirmationResult: any,
+    verificationId: string,
     otpCode: string
   ) => {
     setLoading(true);
@@ -193,7 +193,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const firebaseUser = credential.user;
 
       // Link the phone number to the newly created account using the OTP verification
-      const phoneCredential = PhoneAuthProvider.credential(confirmationResult.verificationId, otpCode);
+      const phoneCredential = PhoneAuthProvider.credential(verificationId, otpCode);
       await linkWithCredential(firebaseUser, phoneCredential);
 
       if (firebaseUser) {
@@ -253,11 +253,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const verifyPhoneOTP = async (confirmationResult: any, otpCode: string) => {
+  const verifyPhoneOTP = async (verificationId: string, otpCode: string) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await firebasePhoneAuth.verifyOTP(confirmationResult, otpCode);
+      const result = await firebasePhoneAuth.verifyOTP(verificationId, otpCode);
       const firebaseUser = result.user;
       if (firebaseUser) {
         const mapped = mapFirebaseUser(firebaseUser);
