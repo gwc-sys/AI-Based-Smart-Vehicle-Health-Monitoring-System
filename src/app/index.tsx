@@ -1,14 +1,16 @@
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
+import { NavigationContainer, NavigationIndependentTree } from '@react-navigation/native';
 import AppNavigator from '../navigation/AppNavigator';
 
 export default function Page() {
-  // Firebase is already initialized in root _layout.tsx
   return (
-    <>
-      <AppNavigator />
-      <StatusBar style="auto" />
-    </>
+    <NavigationIndependentTree>
+      <NavigationContainer>
+        <AppNavigator />
+        <StatusBar style="auto" />
+      </NavigationContainer>
+    </NavigationIndependentTree>
   );
 }
 

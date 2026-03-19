@@ -13,9 +13,9 @@ export default function AppNavigator() {
   const { user, initializing } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
 
-  // Keep splash visible for at least 20 seconds, but also while auth is loading.
+  // Keep splash visible for at least 10 seconds, but also while auth is loading.
   useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 20000);
+    const timer = setTimeout(() => setShowSplash(false), 5000);
     return () => clearTimeout(timer);
   }, []);
 

@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
 import {
   Dimensions,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -20,6 +21,7 @@ export default function DashboardScreen() {
   const { vehicles, loading, refresh } = useVehicleData();
   const [showCharts, setShowCharts] = useState(true);
   const screenWidth = Dimensions.get('window').width;
+  const canRenderCharts = Platform.OS !== 'web';
 
   useEffect(() => {
     refresh().catch(() => {});
@@ -121,7 +123,7 @@ export default function DashboardScreen() {
         </View>
 
         {/* Charts Section */}
-        {showCharts && (
+        {showCharts && canRenderCharts && (
           <View style={styles.chartsContainer}>
             {/* Fuel Efficiency Line Chart */}
             <View style={styles.chartCard}>
@@ -169,6 +171,15 @@ export default function DashboardScreen() {
                 />
               </View>
             )}
+          </View>
+        )}
+
+        {showCharts && !canRenderCharts && (
+          <View style={styles.chartFallbackCard}>
+            <Text style={styles.chartTitle}>Insights</Text>
+            <Text style={styles.chartFallbackText}>
+              Dashboard charts are disabled on this platform to avoid rendering crashes.
+            </Text>
           </View>
         )}
 
@@ -287,6 +298,22 @@ const styles = StyleSheet.create({
   chart: {
     marginVertical: 8,
     borderRadius: 8,
+  },
+  chartFallbackCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  chartFallbackText: {
+    fontSize: 14,
+    color: Colors.light.icon,
+    lineHeight: 20,
   },
   
   actionsRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20 },

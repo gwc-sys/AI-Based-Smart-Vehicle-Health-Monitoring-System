@@ -1,5 +1,5 @@
 import { getVehicles, Vehicle } from '@/services/vehicleService';
-import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 type VehicleContextType = {
   vehicles: Vehicle[];
@@ -16,7 +16,7 @@ export const VehicleProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Vehicle | null>(null);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getVehicles();
@@ -26,20 +26,25 @@ export const VehicleProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  function selectVehicle(id: string | null) {
+  const selectVehicle = useCallback((id: string | null) => {
     if (!id) return setSelected(null);
     const v = vehicles.find((x) => x.id === id) ?? null;
     setSelected(v);
-  }
+  }, [vehicles]);
 
   useEffect(() => {
-    refresh();
-  }, []);
+    refresh().catch(() => {});
+  }, [refresh]);
+
+  const value = useMemo(
+    () => ({ vehicles, loading, refresh, selected, selectVehicle }),
+    [vehicles, loading, refresh, selected, selectVehicle]
+  );
 
   return (
-    <VehicleContext.Provider value={{ vehicles, loading, refresh, selected, selectVehicle }}>
+    <VehicleContext.Provider value={value}>
       {children}
     </VehicleContext.Provider>
   );
