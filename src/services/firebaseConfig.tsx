@@ -12,6 +12,7 @@ import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
  * Ensure you have `firebase` installed (e.g. `npm install firebase`).
  */
 import {
+    ConfirmationResult,
     getAuth,
     RecaptchaVerifier,
     signInWithCredential,
@@ -31,7 +32,8 @@ const firebaseConfig = {
 
 let firebaseAppInstance: FirebaseApp | null = null;
 let webRecaptchaVerifier: RecaptchaVerifier | null = null;
-const WEB_RECAPTCHA_CONTAINER_ID = 'firebase-recaptcha-container';
+let webConfirmationResult: ConfirmationResult | null = null;
+const WEB_RECAPTCHA_CONTAINER_ID = 'recaptcha-container';
 
 /**
  * Validates Firebase configuration
@@ -98,15 +100,9 @@ function getWebRecaptchaContainer(): HTMLElement {
     throw new Error('reCAPTCHA container is only available on web');
   }
 
-  let container = document.getElementById(WEB_RECAPTCHA_CONTAINER_ID);
+  const container = document.getElementById(WEB_RECAPTCHA_CONTAINER_ID);
   if (!container) {
-    container = document.createElement('div');
-    container.id = WEB_RECAPTCHA_CONTAINER_ID;
-    container.style.position = 'fixed';
-    container.style.bottom = '16px';
-    container.style.right = '16px';
-    container.style.zIndex = '2147483647';
-    document.body.appendChild(container);
+    throw new Error('reCAPTCHA container is missing. Open the OTP screen before sending the verification code.');
   }
 
   return container;
@@ -116,6 +112,17 @@ async function getWebRecaptchaVerifier() {
   const auth = getAuth(getFirebaseApp());
 
   if (webRecaptchaVerifier) {
+    const existingContainer = document.getElementById(WEB_RECAPTCHA_CONTAINER_ID);
+    if (!existingContainer || !existingContainer.isConnected) {
+      clearWebRecaptchaVerifier();
+    }
+  }
+
+  if (webRecaptchaVerifier) {
+    if (window.recaptchaVerifier === webRecaptchaVerifier) {
+      return webRecaptchaVerifier;
+    }
+
     try {
       webRecaptchaVerifier.clear();
     } catch (error) {
@@ -144,7 +151,29 @@ async function getWebRecaptchaVerifier() {
   });
 
   await webRecaptchaVerifier.render();
+  window.recaptchaVerifier = webRecaptchaVerifier;
   return webRecaptchaVerifier;
+}
+
+function clearWebRecaptchaVerifier() {
+  if (typeof window !== 'undefined') {
+    window.recaptchaVerifier = undefined;
+    window.confirmationResult = undefined;
+  }
+
+  webConfirmationResult = null;
+
+  if (!webRecaptchaVerifier) {
+    return;
+  }
+
+  try {
+    webRecaptchaVerifier.clear();
+  } catch (error) {
+    console.warn('[Firebase] Failed to clear reCAPTCHA verifier', error);
+  }
+
+  webRecaptchaVerifier = null;
 }
 
 export const firebasePhoneAuth = {
@@ -172,15 +201,14 @@ export const firebasePhoneAuth = {
       }
 
       const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+      if (typeof window !== 'undefined') {
+        window.confirmationResult = confirmationResult;
+        webConfirmationResult = confirmationResult;
+      }
       return { verificationId: confirmationResult.verificationId };
     } catch (error: any) {
       if (typeof window !== 'undefined' && !verifier) {
-        try {
-          webRecaptchaVerifier?.clear();
-        } catch (clearError) {
-          console.warn('[Firebase] Failed to clear reCAPTCHA verifier after send failure', clearError);
-        }
-        webRecaptchaVerifier = null;
+        clearWebRecaptchaVerifier();
       }
       const code = error?.code as string | undefined;
       const rawMessage = error?.message ?? 'Unknown Firebase error';
@@ -194,6 +222,9 @@ export const firebasePhoneAuth = {
         hint = ' Enable Phone provider in Firebase Console > Authentication > Sign-in method.';
       } else if (code === 'auth/invalid-app-credential' || code === 'auth/captcha-check-failed') {
         hint = ' Check Authorized Domains in Firebase Console and make sure this web host is listed.';
+      } else if (rawMessage.toLowerCase().includes('network error')) {
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'this host';
+        hint = ` Verify that "${host}" is added in Firebase Console > Authentication > Settings > Authorized domains, then retry without tracker-blocking extensions for the reCAPTCHA step.`;
       }
 
       throw new Error(`Failed to send OTP${code ? ` (${code})` : ''}: ${rawMessage}.${hint}`);
@@ -210,9 +241,21 @@ export const firebasePhoneAuth = {
    */
   verifyOTP: async (verificationId: string, otpCode: string): Promise<any> => {
     try {
+      if (typeof window !== 'undefined') {
+        const confirmationResult = window.confirmationResult ?? webConfirmationResult;
+        if (confirmationResult) {
+          const result = await confirmationResult.confirm(otpCode);
+          clearWebRecaptchaVerifier();
+          return result;
+        }
+      }
+
       const auth = getAuth(getFirebaseApp());
       const credential = PhoneAuthProvider.credential(verificationId, otpCode);
       const result = await signInWithCredential(auth, credential);
+      if (typeof window !== 'undefined') {
+        clearWebRecaptchaVerifier();
+      }
       return result;
     } catch (error: any) {
       throw new Error(`Failed to verify OTP: ${error.message}`);

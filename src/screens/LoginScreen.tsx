@@ -43,7 +43,7 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
   const [phoneNumber, setPhoneNumber] = useState<string>('');
 
   const navigation = useNavigation<any>();
-  const { signIn, sendPhoneOTP } = useAuth();
+  const { signIn } = useAuth();
 
   const handleLogin = async (): Promise<void> => {
     if (!email || !password) {
@@ -80,13 +80,11 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
     }
 
     try {
-      const { verificationId } = await sendPhoneOTP(phoneNumber.trim());
       navigation.navigate('PhoneOTP', {
-        verificationId,
-        phoneNumber: phoneNumber.trim()
+        phoneNumber: phoneNumber.trim(),
       });
     } catch (err) {
-      Alert.alert('Failed to send OTP', (err as Error).message || 'Unable to send verification code');
+      Alert.alert('Error', (err as Error).message || 'Unable to continue to phone verification');
     }
   };
 

@@ -194,6 +194,15 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
           </View>
 
           <View style={styles.formContainer}>
+            {Platform.OS === 'web' && (
+              <View
+                nativeID="recaptcha-container"
+                style={styles.webRecaptchaContainer}
+                // `id` is needed on web so Firebase can bind RecaptchaVerifier to this node.
+                {...({ id: 'recaptcha-container' } as any)}
+              />
+            )}
+
             <View style={styles.inputContainer}>
               <Text style={styles.label}>OTP Code</Text>
               <TextInput
@@ -319,6 +328,12 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     flex: 1,
+  },
+  webRecaptchaContainer: {
+    minHeight: 78,
+    marginBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   inputContainer: {
     marginBottom: 24,
