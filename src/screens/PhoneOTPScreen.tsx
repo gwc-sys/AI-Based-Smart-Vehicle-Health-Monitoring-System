@@ -1,6 +1,6 @@
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import useAuth from '../hooks/useAuth';
-import firebaseConfig, { initFirebase } from '../services/firebaseConfig';
+import firebaseConfig from '../services/firebaseConfig';
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface PhoneOTPScreenProps {}
 
@@ -23,24 +23,28 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const [otpCode, setOtpCode] = useState<string>('');
   const [resendTimer, setResendTimer] = useState<number>(30);
   const [canResend, setCanResend] = useState<boolean>(false);
-  const [isFirebaseInitialized, setIsFirebaseInitialized] = useState<boolean>(false);
 
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { signUpWithPhoneVerification, sendPhoneOTP, loading } = useAuth();
 
-  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal>(null);
+  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
+  const usesNativeRecaptcha = Platform.OS !== 'web';
 
   const phoneNumber = route.params?.phoneNumber;
   const fullName = route.params?.fullName;
   const email = route.params?.email;
   const password = route.params?.password;
   const confirmationResult = route.params?.confirmationResult;
+  const isRegistrationFlow = !!(fullName && email && password);
 
-  useEffect(() => {
-    const { initialized } = initFirebase();
-    setIsFirebaseInitialized(initialized);
-  }, []);
+  const navigateBackSafely = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate(isRegistrationFlow ? 'Register' : 'Login');
+  }, [isRegistrationFlow, navigation]);
 
   useEffect(() => {
     let timer: number;
@@ -54,10 +58,14 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
 
   useEffect(() => {
     const sendInitialOTP = async () => {
-      if (!isFirebaseInitialized || !phoneNumber || !recaptchaVerifier.current) return;
+      if (!phoneNumber) return;
+      if (usesNativeRecaptcha && !recaptchaVerifier.current) return;
 
       try {
-        const confirmationResult = await sendPhoneOTP(phoneNumber, recaptchaVerifier.current);
+        const confirmationResult = await sendPhoneOTP(
+          phoneNumber,
+          usesNativeRecaptcha ? recaptchaVerifier.current : undefined,
+        );
         // Update the route params with confirmation result
         navigation.setParams({
           confirmationResult,
@@ -68,14 +76,24 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
         });
       } catch (err) {
         Alert.alert('Failed to send OTP', (err as Error).message || 'Unable to send OTP');
-        navigation.goBack();
+        navigateBackSafely();
       }
     };
 
-    if (phoneNumber && isFirebaseInitialized) {
+    if (phoneNumber && !confirmationResult) {
       sendInitialOTP();
     }
-  }, [phoneNumber, sendPhoneOTP, navigation, fullName, email, password, isFirebaseInitialized]);
+  }, [
+    phoneNumber,
+    confirmationResult,
+    sendPhoneOTP,
+    navigation,
+    fullName,
+    email,
+    password,
+    usesNativeRecaptcha,
+    navigateBackSafely,
+  ]);
 
   const handleVerifyOTP = async (): Promise<void> => {
     if (!otpCode.trim() || otpCode.length !== 6) {
@@ -85,7 +103,7 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
 
     if (!confirmationResult) {
       Alert.alert('Error', 'OTP verification session expired. Please try again.');
-      navigation.goBack();
+      navigateBackSafely();
       return;
     }
 
@@ -112,10 +130,14 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   };
 
   const handleResendOTP = async (): Promise<void> => {
-    if (!canResend || !phoneNumber || !recaptchaVerifier.current || !isFirebaseInitialized) return;
+    if (!canResend || !phoneNumber) return;
+    if (usesNativeRecaptcha && !recaptchaVerifier.current) return;
 
     try {
-      const newConfirmationResult = await sendPhoneOTP(phoneNumber, recaptchaVerifier.current);
+      const newConfirmationResult = await sendPhoneOTP(
+        phoneNumber,
+        usesNativeRecaptcha ? recaptchaVerifier.current : undefined,
+      );
       setResendTimer(30);
       setCanResend(false);
       setOtpCode('');
@@ -134,7 +156,7 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   };
 
   const handleBack = (): void => {
-    navigation.goBack();
+    navigateBackSafely();
   };
 
   return (
@@ -219,15 +241,10 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
               <Text style={styles.backButtonText}>Change Phone Number</Text>
             </TouchableOpacity>
           </View>
-
-          {/* reCAPTCHA container for web */}
-          {Platform.OS === 'web' && (
-            <View id="recaptcha-container" style={styles.recaptchaContainer} />
-          )}
         </ScrollView>
 
         {/* Firebase reCAPTCHA Verifier Modal for mobile */}
-        {isFirebaseInitialized && (
+        {usesNativeRecaptcha && (
           <FirebaseRecaptchaVerifierModal
             ref={recaptchaVerifier}
             firebaseConfig={firebaseConfig}
@@ -355,10 +372,6 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? {
       cursor: 'pointer',
     } : {}),
-  },
-  recaptchaContainer: {
-    marginTop: 20,
-    alignItems: 'center',
   },
 });
 

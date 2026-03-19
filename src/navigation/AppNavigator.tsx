@@ -10,7 +10,7 @@ import BottomTabNavigator from './BottomTabNavigator';
 const RootStack = createNativeStackNavigator();
 
 export default function AppNavigator() {
-  const { user, loading } = useAuth();
+  const { user, initializing } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
 
   // Keep splash visible for at least 20 seconds, but also while auth is loading.
@@ -20,7 +20,7 @@ export default function AppNavigator() {
   }, []);
 
   // Show splash if auth is still loading OR the minimum splash time hasn't elapsed.
-  if (showSplash || loading) {
+  if (showSplash || initializing) {
     return <SplashScreen />;
   }
 

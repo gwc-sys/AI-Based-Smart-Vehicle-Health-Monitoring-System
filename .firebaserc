@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "ai-based-smart-vehicle-health"
-  }
+    "default": "ai-based-smart-vehicle-h-b714b",
+    "ai-based-smart-vehicle-h-b714b": "ai-based-smart-vehicle-h-b714b"
+  },
+  "targets": {},
+  "etags": {}
 }

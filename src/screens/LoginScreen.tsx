@@ -319,13 +319,6 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
               </TouchableOpacity>
             </View>
           </View>
-
-          {/* reCAPTCHA container for phone authentication */}
-          {Platform.OS === 'web' && (
-            <View style={styles.recaptchaContainer}>
-              <div id="recaptcha-container"></div>
-            </View>
-          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -540,11 +533,6 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' ? {
       cursor: 'pointer',
     } : {}),
-  },
-  recaptchaContainer: {
-    width: '100%',
-    alignItems: 'center',
-    marginTop: 16,
   },
 });
 

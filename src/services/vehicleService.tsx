@@ -13,8 +13,8 @@ export type Vehicle = {
 };
 
 export async function getVehicles(): Promise<Vehicle[]> {
-  const res = await api.get('/vehicles');
-  return res.data;
+  // Local fallback: disable remote vehicle list calls during development.
+  return [];
 }
 
 export async function getVehicle(id: string): Promise<Vehicle> {

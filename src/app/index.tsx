@@ -1,22 +1,14 @@
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
-import { AuthProvider } from '../context/AuthContext';
-import { VehicleProvider } from '../context/VehicleContext';
 import AppNavigator from '../navigation/AppNavigator';
-import { initFirebase } from '../services/firebaseConfig';
-
 
 export default function Page() {
-  // ensure firebase (JS SDK) is initialized on web/any JS runtime
-  initFirebase();
-
+  // Firebase is already initialized in root _layout.tsx
   return (
-    <AuthProvider>
-      <VehicleProvider>
-        <AppNavigator />
-        <StatusBar style="auto" />
-      </VehicleProvider>
-    </AuthProvider>
+    <>
+      <AppNavigator />
+      <StatusBar style="auto" />
+    </>
   );
 }
 

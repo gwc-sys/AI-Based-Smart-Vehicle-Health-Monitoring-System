@@ -10,7 +10,7 @@ import {
     updateProfile,
 } from 'firebase/auth';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import { firebasePhoneAuth, initFirebase } from '../services/firebaseConfig';
+import { firebasePhoneAuth, getFirebaseApp } from '../services/firebaseConfig';
 
 // helper to convert Firebase user to our local User type
 function mapFirebaseUser(fu: any): User {
@@ -33,6 +33,7 @@ type User = {
 
 type AuthContextType = {
   user: User | null;
+  initializing: boolean;
   loading: boolean;
   error?: string | null;
   signIn: (email: string, password: string) => Promise<void>;
@@ -55,27 +56,21 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// initialize Firebase (important for web builds)
-const { initialized } = initFirebase();
-if (initialized) {
-  console.log('[AuthContext] firebase initialized');
-} else {
-  console.warn('[AuthContext] firebase not initialized; auth operations may fail');
-}
-
-// Note: we no longer use a mock API. All operations use Firebase Auth.
+// Note: Firebase initialization moved to AuthProvider to ensure proper timing
+// and avoid module-level initialization issues
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [initializing, setInitializing] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // restore session from AsyncStorage or firebase auth state
+    // Firebase is already initialized in the root _layout.tsx
+    // Here we just restore session and listen to auth state changes
     const restore = async () => {
       try {
-        initFirebase();
-        const auth = getAuth();
+        const auth = getAuth(getFirebaseApp());
         const firebaseUser = auth.currentUser;
         if (firebaseUser) {
           const mapped = mapFirebaseUser(firebaseUser);
@@ -88,14 +83,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } catch (err) {
         console.error('Failed to restore session:', err);
       } finally {
-        setLoading(false);
+        setInitializing(false);
       }
     };
+
     restore();
 
-    // also listen to auth state changes to keep currentUser in sync
-    initFirebase();
-    const auth = getAuth();
+    // Listen to auth state changes to keep currentUser in sync
+    const auth = getAuth(getFirebaseApp());
     const unsubscribe = onAuthStateChanged(auth, async (fu: any) => {
       if (fu) {
         const mapped = mapFirebaseUser(fu);
@@ -113,8 +108,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     setError(null);
     try {
-      initFirebase();
-      const auth = getAuth();
+      // Firebase already initialized in root _layout.tsx
+      const auth = getAuth(getFirebaseApp());
       const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
       const firebaseUser = credential.user;
       if (firebaseUser) {
@@ -134,8 +129,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOut = async () => {
     setLoading(true);
     try {
-      initFirebase();
-      const auth = getAuth();
+      // Firebase already initialized in root _layout.tsx
+      const auth = getAuth(getFirebaseApp());
       await firebaseSignOut(auth);
       await AsyncStorage.removeItem('currentUser');
       setUser(null);
@@ -153,8 +148,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!name.trim() || !email.trim() || !password) throw new Error('All fields are required');
       if (password.length < 8) throw new Error('Password must be at least 8 characters long');
       if (!email.includes('@') || !email.includes('.')) throw new Error('Please enter a valid email address');
-      initFirebase();
-      const auth = getAuth();
+      // Firebase already initialized in root _layout.tsx
+      const auth = getAuth(getFirebaseApp());
       const credential = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
       const firebaseUser = credential.user;
       if (firebaseUser) {
@@ -190,8 +185,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (password.length < 8) throw new Error('Password must be at least 8 characters long');
       if (!email.includes('@') || !email.includes('.')) throw new Error('Please enter a valid email address');
 
-      initFirebase();
-      const auth = getAuth();
+      // Firebase already initialized in root _layout.tsx
+      const auth = getAuth(getFirebaseApp());
 
       // Create user account with email/password first
       const credential = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
@@ -217,8 +212,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateUser = async (userData: Partial<User>) => {
-    initFirebase();
-    const auth = getAuth();
+    // Firebase already initialized in root _layout.tsx
+    const auth = getAuth(getFirebaseApp());
     const firebaseUser = auth.currentUser;
     if (!firebaseUser) throw new Error('No user logged in');
     if (userData.name) await updateProfile(firebaseUser, { displayName: userData.name });
@@ -278,10 +273,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // Authentication is ready once the session is restored
   return (
     <AuthContext.Provider
       value={{
         user,
+        initializing,
         loading,
         error,
         signIn,
