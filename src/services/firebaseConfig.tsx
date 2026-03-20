@@ -1,23 +1,12 @@
-// Firebase configuration - values are pulled from environment variables when
-// available, with fallbacks to the hard‑coded credentials shown below.  This
-// lets you run the app without a .env file during development, while still
-// allowing production builds to override via EXPO_PUBLIC_FIREBASE_* vars.
-import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
 
-/**
- * Firebase Authentication API
- * These functions handle authentication with Firebase Authentication
- *
- * NOTE: These use the Firebase Web SDK (`firebase/auth`).
- * Ensure you have `firebase` installed (e.g. `npm install firebase`).
- */
+import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
 import {
-    ConfirmationResult,
-    getAuth,
-    RecaptchaVerifier,
-    signInWithCredential,
-    PhoneAuthProvider,
-    signInWithPhoneNumber
+  ConfirmationResult,
+  getAuth,
+  PhoneAuthProvider,
+  RecaptchaVerifier,
+  signInWithCredential,
+  signInWithPhoneNumber
 } from 'firebase/auth';
 import { Env } from '../config/env';
 

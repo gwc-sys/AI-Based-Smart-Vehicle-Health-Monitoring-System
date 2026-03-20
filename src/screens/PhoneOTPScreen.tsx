@@ -281,7 +281,7 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
               setIsRecaptchaReady(!!instance);
             }}
             firebaseConfig={firebaseConfig}
-            attemptInvisibleVerification={true}
+            attemptInvisibleVerification={false}
           />
         )}
       </KeyboardAvoidingView>
