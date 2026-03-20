@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import AppIcon from '@/components/AppIcon';
 import React, { useEffect, useState } from 'react';
 import {
     Alert,
@@ -78,11 +78,11 @@ export default function AlertsScreen() {
               <View style={styles.cardActions}>
                 {!a.seen && (
                   <TouchableOpacity onPress={() => markAsRead(a.id)} style={styles.iconButton}>
-                    <Ionicons name="checkmark-done-outline" size={20} color={Colors.light.tint} />
+                    <AppIcon name="checkmark-done-outline" size={20} color={Colors.light.tint} />
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity onPress={() => dismissAlert(a.id)} style={styles.iconButton}>
-                  <Ionicons name="trash" size={20} color="#FF3B30" />
+                  <AppIcon name="trash" size={20} color="#FF3B30" />
                 </TouchableOpacity>
               </View>
             </View>

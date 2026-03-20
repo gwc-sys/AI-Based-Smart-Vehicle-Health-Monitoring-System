@@ -1,8 +1,8 @@
 import { useAnalytics } from '@/hooks/useAnalytics';
+import AppIcon from '@/components/AppIcon';
 import useAuth from '@/hooks/useAuth';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useVehicleData } from '@/hooks/useVehicleData';
-import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -269,7 +269,7 @@ export default function ProfileScreen() {
 
   const renderStatCard = (icon: string, label: string, value: string | number) => (
     <View style={styles.statCard}>
-      <Ionicons name={icon as any} size={24} color={Colors.light.tint} />
+      <AppIcon name={icon} size={24} color={Colors.light.tint} />
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
@@ -295,7 +295,7 @@ export default function ProfileScreen() {
                   {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                 </Text>
                 <View style={styles.cameraBadge}>
-                  <Ionicons name="camera" size={12} color="#fff" />
+                  <AppIcon name="camera" size={12} color="#fff" />
                 </View>
               </View>
             )}
@@ -306,7 +306,7 @@ export default function ProfileScreen() {
           
           {!isConnected && (
             <View style={styles.offlineBadge}>
-              <Ionicons name="cloud-offline" size={16} color="#fff" />
+              <AppIcon name="cloud-offline" size={16} color="#fff" />
               <Text style={styles.offlineText}>Offline Mode</Text>
             </View>
           )}
@@ -315,17 +315,17 @@ export default function ProfileScreen() {
         {/* Action Buttons */}
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.actionButton} onPress={handleEditProfile}>
-            <Ionicons name="pencil" size={20} color={Colors.light.tint} />
+            <AppIcon name="pencil" size={20} color={Colors.light.tint} />
             <Text style={styles.actionButtonText}>Edit Profile</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionButton} onPress={handleShareProfile}>
-            <Ionicons name="share-social" size={20} color={Colors.light.tint} />
+            <AppIcon name="share-social" size={20} color={Colors.light.tint} />
             <Text style={styles.actionButtonText}>Share</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionButton} onPress={() => setShowSettingsModal(true)}>
-            <Ionicons name="settings" size={20} color={Colors.light.tint} />
+            <AppIcon name="settings" size={20} color={Colors.light.tint} />
             <Text style={styles.actionButtonText}>Settings</Text>
           </TouchableOpacity>
         </View>
@@ -373,7 +373,7 @@ export default function ProfileScreen() {
             
             {vehicles.slice(0, 2).map((vehicle, index) => (
               <View key={vehicle.id || index} style={styles.vehicleCard}>
-                <Ionicons name="car" size={24} color={Colors.light.tint} />
+                <AppIcon name="car" size={24} color={Colors.light.tint} />
                 <View style={styles.vehicleInfo}>
                   <Text style={styles.vehicleName}>
                     {vehicle.make} {vehicle.model} {vehicle.year}
@@ -382,7 +382,7 @@ export default function ProfileScreen() {
                     {vehicle.plateNumber} • {vehicle.fuelType}
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color={Colors.light.icon} />
+                <AppIcon name="chevron-forward" size={20} color={Colors.light.icon} />
               </View>
             ))}
           </View>
@@ -393,21 +393,21 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Support</Text>
           
           <TouchableOpacity style={styles.supportItem} onPress={handleContactSupport}>
-            <Ionicons name="mail" size={20} color={Colors.light.tint} />
+            <AppIcon name="mail" size={20} color={Colors.light.tint} />
             <Text style={styles.supportItemText}>Contact Support</Text>
-            <Ionicons name="chevron-forward" size={20} color={Colors.light.icon} />
+            <AppIcon name="chevron-forward" size={20} color={Colors.light.icon} />
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.supportItem} onPress={() => Linking.openURL('https://yourapp.com/faq')}>
-            <Ionicons name="help-circle" size={20} color={Colors.light.tint} />
+            <AppIcon name="help-circle" size={20} color={Colors.light.tint} />
             <Text style={styles.supportItemText}>FAQ & Help</Text>
-            <Ionicons name="chevron-forward" size={20} color={Colors.light.icon} />
+            <AppIcon name="chevron-forward" size={20} color={Colors.light.icon} />
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.supportItem} onPress={() => Linking.openURL('https://yourapp.com/privacy')}>
-            <Ionicons name="document-text" size={20} color={Colors.light.tint} />
+            <AppIcon name="document-text" size={20} color={Colors.light.tint} />
             <Text style={styles.supportItemText}>Privacy Policy</Text>
-            <Ionicons name="chevron-forward" size={20} color={Colors.light.icon} />
+            <AppIcon name="chevron-forward" size={20} color={Colors.light.icon} />
           </TouchableOpacity>
         </View>
 
@@ -423,7 +423,7 @@ export default function ProfileScreen() {
               <ActivityIndicator color="#fff" size="small" />
             ) : (
               <>
-                <Ionicons name="log-out" size={20} color="#fff" />
+                <AppIcon name="log-out" size={20} color="#fff" />
                 <Text style={styles.logoutButtonText}>Log Out</Text>
               </>
             )}
@@ -449,7 +449,7 @@ export default function ProfileScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Edit Profile</Text>
               <TouchableOpacity onPress={() => setShowEditModal(false)}>
-                <Ionicons name="close" size={24} color={Colors.light.text} />
+                <AppIcon name="close" size={24} color={Colors.light.text} />
               </TouchableOpacity>
             </View>
 
@@ -495,7 +495,7 @@ export default function ProfileScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Settings</Text>
               <TouchableOpacity onPress={() => setShowSettingsModal(false)}>
-                <Ionicons name="close" size={24} color={Colors.light.text} />
+                <AppIcon name="close" size={24} color={Colors.light.text} />
               </TouchableOpacity>
             </View>
 
@@ -522,7 +522,7 @@ export default function ProfileScreen() {
                 <Text style={styles.settingLabel}>Language</Text>
                 <TouchableOpacity style={styles.settingValue}>
                   <Text>English</Text>
-                  <Ionicons name="chevron-down" size={20} color={Colors.light.icon} />
+                  <AppIcon name="chevron-down" size={20} color={Colors.light.icon} />
                 </TouchableOpacity>
               </View>
 
@@ -562,7 +562,7 @@ export default function ProfileScreen() {
 // Helper component for info rows
 const InfoRow = ({ icon, label, value }: { icon: string; label: string; value: string }) => (
   <View style={styles.infoRow}>
-    <Ionicons name={icon as any} size={20} color={Colors.light.icon} />
+    <AppIcon name={icon} size={20} color={Colors.light.icon} />
     <Text style={styles.infoLabel}>{label}:</Text>
     <Text style={styles.infoValue}>{value}</Text>
   </View>

@@ -1,6 +1,6 @@
 import React from 'react';
-import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import AppIcon from './AppIcon';
 
 type ProviderName = 'google' | 'apple';
 
@@ -10,7 +10,7 @@ type SocialAuthButtonsProps = {
   mode: 'login' | 'register';
 };
 
-const PROVIDERS: Array<{ key: ProviderName; label: string; icon: keyof typeof Ionicons.glyphMap; iconColor: string }> = [
+const PROVIDERS: Array<{ key: ProviderName; label: string; icon: string; iconColor: string }> = [
   { key: 'google', label: 'Google', icon: 'logo-google', iconColor: '#4285F4' },
   { key: 'apple', label: 'Apple', icon: 'logo-apple', iconColor: '#111827' },
 ];
@@ -31,7 +31,9 @@ export default function SocialAuthButtons({ onPress, loading = false, mode }: So
             accessibilityLabel={`${provider.label} sign-in`}
             accessibilityHint={`Continue using ${provider.label}`}
           >
-            <Ionicons name={provider.icon} size={22} color={provider.iconColor} style={styles.icon} />
+            <View style={styles.icon}>
+              <AppIcon name={provider.icon} size={22} color={provider.iconColor} />
+            </View>
             <Text style={styles.buttonText}>{`Continue with ${provider.label}`}</Text>
           </TouchableOpacity>
         ))}
