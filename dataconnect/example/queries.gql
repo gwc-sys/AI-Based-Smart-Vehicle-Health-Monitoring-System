@@ -1,0 +1,38 @@
+query ListCategories @auth(level: PUBLIC, insecureReason: "This operation is safe to expose to the public") {
+  categories {
+    id
+    name
+    createdAt
+  }
+}
+
+query MyNotes @auth(level: USER) {
+  notes(where: {userId: {eq_expr: "auth.uid"}}) {
+    id
+    title
+    content
+    createdAt
+    isImportant
+    category {
+      name
+    }
+  }
+}
+
+mutation CreateUserNote($title: String!, $content: String!, $isImportant: Boolean, $categoryId: UUID) @auth(level: USER) {
+  note_insert(data: {
+    title: $title,
+    content: $content,
+    isImportant: $isImportant,
+    createdAt_expr: "request.time",
+    userId_expr: "auth.uid",
+    categoryId: $categoryId
+  })
+}
+
+mutation UpdateMyDisplayName($newDisplayName: String!) @auth(level: USER) {
+  user_update(
+    key: {id_expr: "auth.uid"},
+    data: {displayName: $newDisplayName}
+  )
+}

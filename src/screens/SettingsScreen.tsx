@@ -69,7 +69,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Signed in as {user?.email}</Text>
+          <Text style={styles.footerText}>Signed in as {user?.phone || user?.name || 'Phone user'}</Text>
         </View>
       </ScrollView>
     </SafeAreaView>

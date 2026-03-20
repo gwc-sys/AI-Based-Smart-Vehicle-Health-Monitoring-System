@@ -1,0 +1,67 @@
+mutation CreateDemoData @transaction @auth(level: USER, insecureReason: "Seed data mutation, safe for any logged in user to run once.") {
+  user_insertMany(data: [
+    {
+      id: "b9e2d3b2-3b2d-4e9f-8a1a-0a1b2c3d4e5f",
+      displayName: "Alice Smith",
+      createdAt: "2023-10-26T10:00:00Z",
+      email: "alice@example.com",
+      photoUrl: "https://example.com/alice.jpg"
+    },
+    {
+      id: "c8f1e0c1-c1e0-4f8a-9b2b-1b2c3d4e5f6a",
+      displayName: "Bob Johnson",
+      createdAt: "2023-10-26T10:05:00Z",
+      email: "bob@example.com",
+      photoUrl: "https://example.com/bob.jpg"
+    }
+  ])
+  category_insertMany(data: [
+    {
+      id: "d7d0c0d7-d7c0-4e8a-8a1a-2a3b4c5d6e7f",
+      name: "Work",
+      createdAt: "2023-10-26T10:10:00Z",
+      userId: "b9e2d3b2-3b2d-4e9f-8a1a-0a1b2c3d4e5f"
+    },
+    {
+      id: "e6e0b0e6-e6b0-4f7b-9b2b-3b4c5d6e7f8a",
+      name: "Personal",
+      createdAt: "2023-10-26T10:15:00Z",
+      userId: "b9e2d3b2-3b2d-4e9f-8a1a-0a1b2c3d4e5f"
+    },
+    {
+      id: "f5f0a0f5-f5a0-4e6c-8c3c-4c5d6e7f8a9b",
+      name: "Ideas",
+      createdAt: "2023-10-26T10:20:00Z",
+      userId: "c8f1e0c1-c1e0-4f8a-9b2b-1b2c3d4e5f6a"
+    }
+  ])
+  note_insertMany(data: [
+    {
+      id: "a0a0a0a0-a0a0-4a0a-a0a0-0a0a0a0a0a0a",
+      title: "Project Alpha Meeting Notes",
+      content: "Discussed Q4 strategy and upcoming deadlines.",
+      createdAt: "2023-10-26T10:30:00Z",
+      isImportant: true,
+      userId: "b9e2d3b2-3b2d-4e9f-8a1a-0a1b2c3d4e5f",
+      categoryId: "d7d0c0d7-d7c0-4e8a-8a1a-2a3b4c5d6e7f"
+    },
+    {
+      id: "b1b1b1b1-b1b1-4b1b-b1b1-1b1b1b1b1b1b",
+      title: "Grocery List",
+      content: "Milk, eggs, bread, cheese, apples.",
+      createdAt: "2023-10-26T10:35:00Z",
+      isImportant: false,
+      userId: "b9e2d3b2-3b2d-4e9f-8a1a-0a1b2c3d4e5f",
+      categoryId: "e6e0b0e6-e6b0-4f7b-9b2b-3b4c5d6e7f8a"
+    },
+    {
+      id: "c2c2c2c2-c2c2-4c2c-c2c2-2c2c2c2c2c2c",
+      title: "New App Concept",
+      content: "Idea for a social media app focused on pet owners.",
+      createdAt: "2023-10-26T10:40:00Z",
+      isImportant: true,
+      userId: "c8f1e0c1-c1e0-4f8a-9b2b-1b2c3d4e5f6a",
+      categoryId: "f5f0a0f5-f5a0-4e6c-8c3c-4c5d6e7f8a9b"
+    }
+  ])
+}

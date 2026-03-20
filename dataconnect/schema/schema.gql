@@ -1,0 +1,22 @@
+type User @table {
+  displayName: String!
+  createdAt: Timestamp!
+  email: String
+  photoUrl: String
+}
+
+type Category @table {
+  name: String!
+  createdAt: Timestamp!
+  user: User
+}
+
+type Note @table {
+  title: String!
+  content: String!
+  createdAt: Timestamp!
+  updatedAt: Timestamp
+  isImportant: Boolean
+  user: User
+  category: Category
+}

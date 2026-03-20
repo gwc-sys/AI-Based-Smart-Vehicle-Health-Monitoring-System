@@ -16,40 +16,63 @@ import {
 } from 'react-native';
 import useAuth from '../hooks/useAuth';
 import firebaseConfig from '../services/firebaseConfig';
+import { isValidE164PhoneNumber, normalizePhoneNumber, sanitizeOtpCode } from '../utils/phoneAuth';
+
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface PhoneOTPScreenProps {}
 
+const RESEND_WAIT_SECONDS = 30;
+const MAX_OTP_SENDS = 3;
+const OTP_LOCK_MINUTES = 30;
+
 const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const [otpCode, setOtpCode] = useState<string>('');
-  const [resendTimer, setResendTimer] = useState<number>(30);
+  const [resendTimer, setResendTimer] = useState<number>(RESEND_WAIT_SECONDS);
   const [canResend, setCanResend] = useState<boolean>(false);
   const [isSendingOtp, setIsSendingOtp] = useState<boolean>(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
   const [isRecaptchaReady, setIsRecaptchaReady] = useState<boolean>(Platform.OS === 'web');
+  const [otpSendCount, setOtpSendCount] = useState<number>(0);
+  const [isOtpLimitReached, setIsOtpLimitReached] = useState<boolean>(false);
 
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { signUpWithPhoneVerification, sendPhoneOTP, verifyPhoneOTP } = useAuth();
+  const { sendPhoneOTP, signOut, verifyPhoneOTP } = useAuth();
 
   const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
+  const hasRequestedInitialOtp = useRef<boolean>(false);
   const usesNativeRecaptcha = Platform.OS !== 'web';
 
-  const phoneNumber = route.params?.phoneNumber;
-  const fullName = route.params?.fullName;
-  const email = route.params?.email;
-  const password = route.params?.password;
+  const phoneNumber = normalizePhoneNumber(route.params?.phoneNumber ?? '');
   const verificationId = route.params?.verificationId;
-  const isRegistrationFlow = !!(fullName && email && password);
+  const authMode: 'signIn' | 'signUp' = route.params?.authMode === 'signUp' ? 'signUp' : 'signIn';
+
+  const blurFocusedElement = useCallback(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') {
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) {
+      activeElement.blur();
+    }
+  }, []);
 
   const navigateBackSafely = useCallback(() => {
+    blurFocusedElement();
     if (navigation.canGoBack()) {
       navigation.goBack();
       return;
     }
-    navigation.navigate(isRegistrationFlow ? 'Register' : 'Login');
-  }, [isRegistrationFlow, navigation]);
+    navigation.navigate(authMode === 'signUp' ? 'Register' : 'Login');
+  }, [authMode, blurFocusedElement, navigation]);
 
   useEffect(() => {
+    if (isOtpLimitReached) {
+      setCanResend(false);
+      return;
+    }
+
     let timer: number;
     if (resendTimer > 0) {
       timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
@@ -57,28 +80,39 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
       setCanResend(true);
     }
     return () => clearTimeout(timer);
-  }, [resendTimer]);
+  }, [isOtpLimitReached, resendTimer]);
 
   useEffect(() => {
     const sendInitialOTP = async () => {
-      if (!phoneNumber) return;
+      if (!phoneNumber || hasRequestedInitialOtp.current) return;
       if (usesNativeRecaptcha && (!isRecaptchaReady || !recaptchaVerifier.current)) return;
+      if (!isValidE164PhoneNumber(phoneNumber)) {
+        Alert.alert('Invalid phone number', 'Please enter a valid phone number in international format (e.g., +1234567890).');
+        navigateBackSafely();
+        return;
+      }
 
+      hasRequestedInitialOtp.current = true;
       setIsSendingOtp(true);
+
       try {
-        const { verificationId } = await sendPhoneOTP(
+        const { verificationId: nextVerificationId } = await sendPhoneOTP(
           phoneNumber,
           usesNativeRecaptcha ? recaptchaVerifier.current : undefined,
         );
-        // Update the route params with confirmation result
+
+        setOtpSendCount(1);
+        setResendTimer(RESEND_WAIT_SECONDS);
+        setCanResend(false);
+
         navigation.setParams({
-          verificationId,
+          verificationId: nextVerificationId,
           phoneNumber,
-          fullName,
-          email,
-          password,
+          authMode,
         });
       } catch (err) {
+        hasRequestedInitialOtp.current = false;
+        blurFocusedElement();
         Alert.alert('Failed to send OTP', (err as Error).message || 'Unable to send OTP');
         navigateBackSafely();
       } finally {
@@ -90,20 +124,27 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
       sendInitialOTP();
     }
   }, [
-    phoneNumber,
-    verificationId,
-    sendPhoneOTP,
-    navigation,
-    fullName,
-    email,
-    password,
-    usesNativeRecaptcha,
+    authMode,
+    blurFocusedElement,
     isRecaptchaReady,
     navigateBackSafely,
+    navigation,
+    phoneNumber,
+    sendPhoneOTP,
+    usesNativeRecaptcha,
+    verificationId,
   ]);
 
+  useEffect(() => {
+    return () => {
+      blurFocusedElement();
+    };
+  }, [blurFocusedElement]);
+
   const handleVerifyOTP = async (): Promise<void> => {
-    if (!otpCode.trim() || otpCode.length !== 6) {
+    const sanitizedCode = sanitizeOtpCode(otpCode);
+
+    if (sanitizedCode.length !== 6) {
       Alert.alert('Validation', 'Please enter a valid 6-digit OTP code');
       return;
     }
@@ -115,28 +156,31 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
     }
 
     try {
+      blurFocusedElement();
       setIsVerifyingOtp(true);
-      if (isRegistrationFlow) {
-        if (!fullName || !email || !password) {
-          Alert.alert('Error', 'Registration details are missing. Please start again.');
-          navigation.navigate('Register');
-          return;
-        }
 
-        await signUpWithPhoneVerification(
-          fullName,
-          email,
-          password,
-          phoneNumber,
-          verificationId,
-          otpCode.trim(),
-        );
-        Alert.alert('Success', 'Account created and phone verified successfully!');
-      } else {
-        await verifyPhoneOTP(verificationId, otpCode.trim());
-        Alert.alert('Success', 'Phone number verified successfully!');
+      const result = await verifyPhoneOTP(verificationId, sanitizedCode);
+
+      if (authMode === 'signUp' && !result.isNewUser) {
+        await signOut();
+        Alert.alert('Account exists', 'This mobile number is already registered. Please sign in instead.');
+        navigation.navigate('Login');
+        return;
       }
-      // Navigation will be handled automatically by auth state changes
+
+      if (authMode === 'signIn' && result.isNewUser) {
+        await signOut();
+        Alert.alert('Account not found', 'No account exists for this mobile number. Please sign up first.');
+        navigation.navigate('Register');
+        return;
+      }
+
+      Alert.alert(
+        'Success',
+        authMode === 'signUp'
+          ? 'Phone number verified. Please complete your profile.'
+          : 'Phone number verified successfully!'
+      );
     } catch (err) {
       Alert.alert('Verification failed', (err as Error).message || 'Unable to verify OTP');
     } finally {
@@ -147,34 +191,50 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const handleResendOTP = async (): Promise<void> => {
     if (!canResend || !phoneNumber) return;
     if (usesNativeRecaptcha && !recaptchaVerifier.current) return;
+    if (!isValidE164PhoneNumber(phoneNumber)) {
+      Alert.alert('Invalid phone number', 'Please re-enter your phone number in international format.');
+      navigateBackSafely();
+      return;
+    }
+    if (isOtpLimitReached || otpSendCount >= MAX_OTP_SENDS) {
+      blurFocusedElement();
+      setCanResend(false);
+      setIsOtpLimitReached(true);
+      Alert.alert('OTP Limit Reached', `You have reached the OTP limit. Please try again after ${OTP_LOCK_MINUTES} minutes.`);
+      return;
+    }
 
     setIsSendingOtp(true);
     try {
-      const { verificationId } = await sendPhoneOTP(
+      blurFocusedElement();
+      const { verificationId: nextVerificationId } = await sendPhoneOTP(
         phoneNumber,
         usesNativeRecaptcha ? recaptchaVerifier.current : undefined,
       );
-      setResendTimer(30);
-      setCanResend(false);
+      const nextSendCount = otpSendCount + 1;
+      setOtpSendCount(nextSendCount);
       setOtpCode('');
-      // Update the route params with new confirmation result
+
+      if (nextSendCount >= MAX_OTP_SENDS) {
+        setCanResend(false);
+        setIsOtpLimitReached(true);
+        Alert.alert('OTP Sent', `OTP sent successfully. You have reached the OTP limit. Please try again after ${OTP_LOCK_MINUTES} minutes.`);
+      } else {
+        setResendTimer(RESEND_WAIT_SECONDS);
+        setCanResend(false);
+        Alert.alert('Success', 'OTP sent successfully!');
+      }
+
       navigation.setParams({
-        verificationId,
-        phoneNumber: phoneNumber,
-        fullName,
-        email,
-        password,
+        verificationId: nextVerificationId,
+        phoneNumber,
+        authMode,
       });
-      Alert.alert('Success', 'OTP sent successfully!');
     } catch (err) {
       Alert.alert('Failed to resend OTP', (err as Error).message || 'Unable to send OTP');
     } finally {
       setIsSendingOtp(false);
     }
-  };
-
-  const handleBack = (): void => {
-    navigateBackSafely();
   };
 
   return (
@@ -198,7 +258,6 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
               <View
                 nativeID="recaptcha-container"
                 style={styles.webRecaptchaContainer}
-                // `id` is needed on web so Firebase can bind RecaptchaVerifier to this node.
                 {...({ id: 'recaptcha-container' } as any)}
               />
             )}
@@ -210,16 +269,10 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
                 placeholder="000000"
                 placeholderTextColor="#999"
                 value={otpCode}
-                onChangeText={(text) => {
-                  // Only allow digits and limit to 6 characters
-                  const numericText = text.replace(/[^0-9]/g, '');
-                  if (numericText.length <= 6) {
-                    setOtpCode(numericText);
-                  }
-                }}
+                onChangeText={(text) => setOtpCode(sanitizeOtpCode(text))}
                 keyboardType="number-pad"
                 maxLength={6}
-                autoFocus={true}
+                autoFocus={Platform.OS !== 'web'}
                 accessibilityLabel="OTP input field"
                 accessibilityHint="Enter the 6-digit verification code"
               />
@@ -239,10 +292,12 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
             </TouchableOpacity>
 
             <View style={styles.resendContainer}>
-              <Text style={styles.resendText}>
-                Didn&apos;t receive the code?{' '}
-              </Text>
-              {canResend ? (
+              <Text style={styles.resendText}>Didn&apos;t receive the code? </Text>
+              {isOtpLimitReached ? (
+                <Text style={styles.limitMessage}>
+                  Your OTP limit has been reached. Try again after 30 minutes.
+                </Text>
+              ) : canResend ? (
                 <TouchableOpacity
                   onPress={handleResendOTP}
                   activeOpacity={0.7}
@@ -250,20 +305,16 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
                   accessibilityLabel="Resend OTP"
                   accessibilityHint="Send a new verification code"
                 >
-                  <Text style={styles.resendLink}>
-                    {isSendingOtp ? 'Sending...' : 'Resend OTP'}
-                  </Text>
+                  <Text style={styles.resendLink}>{isSendingOtp ? 'Sending...' : 'Resend OTP'}</Text>
                 </TouchableOpacity>
               ) : (
-                <Text style={styles.resendTimer}>
-                  Resend in {resendTimer}s
-                </Text>
+                <Text style={styles.resendTimer}>Resend in {resendTimer}s</Text>
               )}
             </View>
 
             <TouchableOpacity
               style={styles.backButton}
-              onPress={handleBack}
+              onPress={navigateBackSafely}
               activeOpacity={0.7}
               accessibilityLabel="Back button"
               accessibilityHint="Return to phone number entry"
@@ -273,7 +324,6 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
           </View>
         </ScrollView>
 
-        {/* Firebase reCAPTCHA Verifier Modal for mobile */}
         {usesNativeRecaptcha && (
           <FirebaseRecaptchaVerifierModal
             ref={(instance) => {
@@ -302,11 +352,13 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingBottom: 24,
-    ...(Platform.OS === 'web' ? {
-      maxWidth: 500,
-      marginHorizontal: 'auto',
-      width: '100%',
-    } : {}),
+    ...(Platform.OS === 'web'
+      ? {
+          maxWidth: 500,
+          marginHorizontal: 'auto',
+          width: '100%',
+        }
+      : {}),
   },
   headerContainer: {
     marginTop: Platform.OS === 'web' ? 40 : 60,
@@ -354,9 +406,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 8,
     backgroundColor: '#fafafa',
-    ...(Platform.OS === 'web' ? {
-      outlineStyle: 'none' as any,
-    } : {}),
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}),
   },
   verifyButton: {
     backgroundColor: '#007AFF',
@@ -364,10 +414,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 24,
-    ...(Platform.OS === 'web' ? {
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-    } : {}),
+    ...(Platform.OS === 'web'
+      ? {
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+        }
+      : {}),
   },
   buttonDisabled: {
     backgroundColor: '#ccc',
@@ -391,15 +443,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#007AFF',
     fontWeight: '600',
-    ...(Platform.OS === 'web' ? {
-      cursor: 'pointer',
-      textDecorationLine: 'underline',
-    } : {}),
+    ...(Platform.OS === 'web' ? { cursor: 'pointer', textDecorationLine: 'underline' } : {}),
   },
   resendTimer: {
     fontSize: 14,
     color: '#999',
     fontWeight: '600',
+  },
+  limitMessage: {
+    fontSize: 14,
+    color: '#d32f2f',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   backButton: {
     alignItems: 'center',
@@ -408,9 +463,7 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     color: '#666',
-    ...(Platform.OS === 'web' ? {
-      cursor: 'pointer',
-    } : {}),
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
   },
 });
 

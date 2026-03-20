@@ -1,34 +1,38 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    createUserWithEmailAndPassword,
-    signOut as firebaseSignOut,
-    getAuth,
-    linkWithCredential,
-    onAuthStateChanged,
-    PhoneAuthProvider,
-    signInWithEmailAndPassword,
-    updateProfile,
+  getAuth,
+  onAuthStateChanged,
+  signOut as firebaseSignOut,
+  updateProfile,
 } from 'firebase/auth';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { firebasePhoneAuth, getFirebaseApp } from '../services/firebaseConfig';
 
-// helper to convert Firebase user to our local User type
 function mapFirebaseUser(fu: any): User {
+  const name = fu.displayName || '';
+
   return {
     id: fu.uid,
-    name: fu.displayName || '',
+    name,
     email: fu.email || '',
     phone: fu.phoneNumber || '',
     createdAt: fu.metadata?.creationTime,
+    profileComplete: !!name.trim(),
   };
 }
 
 type User = {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   phone?: string;
   createdAt?: string;
+  profileComplete: boolean;
+};
+
+type PhoneVerificationResult = {
+  isNewUser: boolean;
+  user: User;
 };
 
 type AuthContextType = {
@@ -36,28 +40,16 @@ type AuthContextType = {
   initializing: boolean;
   loading: boolean;
   error?: string | null;
-  signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  signUp: (name: string, email: string, password: string) => Promise<void>;
-  signUpWithPhoneVerification: (
-    name: string,
-    email: string,
-    password: string,
-    phoneNumber: string,
-    verificationId: string,
-    otpCode: string
-  ) => Promise<void>;
+  completePhoneProfile: (name: string) => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
   updateUserProfile: (data: Partial<User>) => Promise<void>;
   updateUserPreferences: (prefs: any) => Promise<void>;
   sendPhoneOTP: (phoneNumber: string, verifier?: any) => Promise<{ verificationId: string }>;
-  verifyPhoneOTP: (verificationId: string, otpCode: string) => Promise<void>;
+  verifyPhoneOTP: (verificationId: string, otpCode: string) => Promise<PhoneVerificationResult>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Note: Firebase initialization moved to AuthProvider to ensure proper timing
-// and avoid module-level initialization issues
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -66,8 +58,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Firebase is already initialized in the root _layout.tsx
-    // Here we just restore session and listen to auth state changes
     const restore = async () => {
       try {
         const auth = getAuth(getFirebaseApp());
@@ -78,7 +68,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
         } else {
           const saved = await AsyncStorage.getItem('currentUser');
-          if (saved) setUser(JSON.parse(saved));
+          if (saved) {
+            setUser(JSON.parse(saved));
+          }
         }
       } catch (err) {
         console.error('Failed to restore session:', err);
@@ -89,7 +81,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     restore();
 
-    // Listen to auth state changes to keep currentUser in sync
     const auth = getAuth(getFirebaseApp());
     const unsubscribe = onAuthStateChanged(auth, async (fu: any) => {
       if (fu) {
@@ -101,110 +92,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         await AsyncStorage.removeItem('currentUser');
       }
     });
+
     return () => unsubscribe();
   }, []);
-
-  const signIn = async (email: string, password: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Firebase already initialized in root _layout.tsx
-      const auth = getAuth(getFirebaseApp());
-      const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-      const firebaseUser = credential.user;
-      if (firebaseUser) {
-        const mapped = mapFirebaseUser(firebaseUser);
-        await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
-        setUser(mapped);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Login failed';
-      setError(msg);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const signOut = async () => {
     setLoading(true);
     try {
-      // Firebase already initialized in root _layout.tsx
       const auth = getAuth(getFirebaseApp());
       await firebaseSignOut(auth);
       await AsyncStorage.removeItem('currentUser');
       setUser(null);
     } catch (err) {
       console.error('Sign out error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signUp = async (name: string, email: string, password: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (!name.trim() || !email.trim() || !password) throw new Error('All fields are required');
-      if (password.length < 8) throw new Error('Password must be at least 8 characters long');
-      if (!email.includes('@') || !email.includes('.')) throw new Error('Please enter a valid email address');
-      // Firebase already initialized in root _layout.tsx
-      const auth = getAuth(getFirebaseApp());
-      const credential = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-      const firebaseUser = credential.user;
-      if (firebaseUser) {
-        await updateProfile(firebaseUser, { displayName: name.trim() });
-        // update local user state and persist
-        const mapped = mapFirebaseUser(firebaseUser);
-        setUser(mapped);
-        await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Registration failed';
-      setError(msg);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signUpWithPhoneVerification = async (
-    name: string,
-    email: string,
-    password: string,
-    phoneNumber: string,
-    verificationId: string,
-    otpCode: string
-  ) => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (!name.trim() || !email.trim() || !password || !phoneNumber.trim()) {
-        throw new Error('All fields are required');
-      }
-      if (password.length < 8) throw new Error('Password must be at least 8 characters long');
-      if (!email.includes('@') || !email.includes('.')) throw new Error('Please enter a valid email address');
-
-      // Firebase already initialized in root _layout.tsx
-      const auth = getAuth(getFirebaseApp());
-
-      // Create user account with email/password first
-      const credential = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-      const firebaseUser = credential.user;
-
-      // Link the phone number to the newly created account using the OTP verification
-      const phoneCredential = PhoneAuthProvider.credential(verificationId, otpCode);
-      await linkWithCredential(firebaseUser, phoneCredential);
-
-      if (firebaseUser) {
-        await updateProfile(firebaseUser, { displayName: name.trim() });
-        const mapped = mapFirebaseUser(firebaseUser);
-        setUser(mapped);
-        await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Registration failed';
-      setError(msg);
       throw err;
     } finally {
       setLoading(false);
@@ -212,25 +112,53 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateUser = async (userData: Partial<User>) => {
-    // Firebase already initialized in root _layout.tsx
     const auth = getAuth(getFirebaseApp());
     const firebaseUser = auth.currentUser;
-    if (!firebaseUser) throw new Error('No user logged in');
-    if (userData.name) await updateProfile(firebaseUser, { displayName: userData.name });
-    // reload and update local state
+
+    if (!firebaseUser) {
+      throw new Error('No user logged in');
+    }
+
+    if (userData.name) {
+      await updateProfile(firebaseUser, { displayName: userData.name.trim() });
+    }
+
     await firebaseUser.reload();
-    const mapped = mapFirebaseUser(firebaseUser);
+
+    const refreshedUser = auth.currentUser;
+    if (!refreshedUser) {
+      throw new Error('Failed to refresh user profile');
+    }
+
+    const mapped = mapFirebaseUser(refreshedUser);
     setUser(mapped);
     await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
   };
 
+  const completePhoneProfile = async (name: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (!name.trim()) {
+        throw new Error('Full name is required');
+      }
+
+      await updateUser({ name: name.trim() });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to complete profile';
+      setError(msg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const updateUserProfile = async (data: Partial<User>) => {
-    // simply reuse updateUser for profile changes
     return updateUser(data);
   };
 
   const updateUserPreferences = async (prefs: any) => {
-    // store preferences locally; backend logic could be added here
     try {
       await AsyncStorage.setItem('userPreferences', JSON.stringify(prefs));
     } catch (err) {
@@ -241,9 +169,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const sendPhoneOTP = async (phoneNumber: string, verifier?: any) => {
     setLoading(true);
     setError(null);
+
     try {
-      const confirmationResult = await firebasePhoneAuth.sendOTP(phoneNumber, verifier);
-      return confirmationResult;
+      return await firebasePhoneAuth.sendOTP(phoneNumber, verifier);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to send OTP';
       setError(msg);
@@ -253,17 +181,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const verifyPhoneOTP = async (verificationId: string, otpCode: string) => {
+  const verifyPhoneOTP = async (verificationId: string, otpCode: string): Promise<PhoneVerificationResult> => {
     setLoading(true);
     setError(null);
+
     try {
       const result = await firebasePhoneAuth.verifyOTP(verificationId, otpCode);
       const firebaseUser = result.user;
-      if (firebaseUser) {
-        const mapped = mapFirebaseUser(firebaseUser);
-        await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
-        setUser(mapped);
+
+      if (!firebaseUser) {
+        throw new Error('Phone verification succeeded but no Firebase user was returned');
       }
+
+      const mapped = mapFirebaseUser(firebaseUser);
+      await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
+      setUser(mapped);
+
+      return {
+        isNewUser: !!result?.additionalUserInfo?.isNewUser,
+        user: mapped,
+      };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'OTP verification failed';
       setError(msg);
@@ -273,7 +210,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Authentication is ready once the session is restored
   return (
     <AuthContext.Provider
       value={{
@@ -281,10 +217,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         initializing,
         loading,
         error,
-        signIn,
         signOut,
-        signUp,
-        signUpWithPhoneVerification,
+        completePhoneProfile,
         updateUser,
         updateUserProfile,
         updateUserPreferences,
@@ -299,7 +233,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+  if (!ctx) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
   return ctx;
 }
 

@@ -1,85 +1,50 @@
 import { useNavigation, useRoute } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    NativeSyntheticEvent,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TextInputKeyPressEventData,
-    TouchableOpacity,
-    View
+  Alert,
+  KeyboardAvoidingView,
+  NativeSyntheticEvent,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TextInputKeyPressEventData,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import useAuth from '../hooks/useAuth';
+import { isValidE164PhoneNumber, normalizePhoneNumber } from '../utils/phoneAuth';
 
-// Define types for component props
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface RegisterScreenProps {}
 
-// Define types for form data
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-interface RegisterFormData {
-  fullName: string;
-  email: string;
-  password: string;
-  confirmPassword: string;
-}
-
-// Extend TouchableOpacity props for web
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type WebTouchableProps = {
-  className?: string;
-  type?: 'button' | 'submit' | 'reset';
-};
-
 const RegisterScreen: React.FC<RegisterScreenProps> = () => {
-  const [fullName, setFullName] = useState<string>('');
-  const [email, setEmail] = useState<string>('');
   const [phoneNumber, setPhoneNumber] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [confirmPassword, setConfirmPassword] = useState<string>('');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
   const [agreeToTerms, setAgreeToTerms] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  useAuth();
 
-  // Handle route params from legal pages
   useEffect(() => {
     if (route.params?.agreedTerms || route.params?.agreedPrivacy) {
       setAgreeToTerms(true);
-      // Clear the params after handling
       navigation.setParams({ agreedTerms: undefined, agreedPrivacy: undefined });
     }
   }, [route.params, navigation]);
 
   const handleRegister = async (): Promise<void> => {
-    // Validation
-    if (!fullName || !email || !phoneNumber || !password || !confirmPassword) {
-      Alert.alert('Validation', 'Please fill in all fields');
+    const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
+
+    if (!phoneNumber.trim()) {
+      Alert.alert('Validation', 'Please enter your mobile number');
       return;
     }
 
-    if (!phoneNumber.trim().startsWith('+') || phoneNumber.trim().length < 8) {
+    if (!isValidE164PhoneNumber(normalizedPhoneNumber)) {
       Alert.alert('Validation', 'Please enter a valid phone number in international format (e.g., +1234567890)');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('Validation', 'Passwords do not match');
-      return;
-    }
-
-    if (password.length < 8) {
-      Alert.alert('Validation', 'Password must be at least 8 characters long');
       return;
     }
 
@@ -91,13 +56,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
     try {
       setIsSubmitting(true);
       navigation.navigate('PhoneOTP', {
-        phoneNumber: phoneNumber.trim(),
-        fullName: fullName.trim(),
-        email: email.trim().toLowerCase(),
-        password,
+        phoneNumber: normalizedPhoneNumber,
+        authMode: 'signUp',
       });
     } catch (err) {
-      Alert.alert('Error', (err as Error).message || 'Unable to proceed');
+      Alert.alert('Error', (err as Error).message || 'Unable to continue');
     } finally {
       setIsSubmitting(false);
     }
@@ -105,14 +68,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
 
   const handleLogin = (): void => {
     navigation.navigate('Login');
-  };
-
-  const handleSocialRegister = (provider: string): void => {
-    // Social registration will be implemented with actual OAuth integration
-    Alert.alert(
-      'Coming Soon',
-      `${provider} registration will be available soon. Please use email registration for now.`
-    );
   };
 
   const handleOpenTermsOfService = (): void => {
@@ -124,25 +79,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
   };
 
   const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>): void => {
-    // Handle Enter key for web
     if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter') {
       handleRegister();
     }
   };
 
-  const togglePasswordVisibility = (): void => {
-    setShowPassword((prev: boolean) => !prev);
-  };
-
-  const toggleConfirmPasswordVisibility = (): void => {
-    setShowConfirmPassword((prev: boolean) => !prev);
-  };
-
-  const toggleTermsAgreement = (): void => {
-    setAgreeToTerms((prev: boolean) => !prev);
-  };
-
-  // Web-specific hover styles
   React.useEffect(() => {
     if (Platform.OS === 'web') {
       const style = document.createElement('style');
@@ -152,11 +93,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
           transform: scale(1.02);
           transition: all 0.2s ease;
         }
-        .social-button:hover {
-          background-color: #e0e0e0 !important;
-          transform: scale(1.1);
-          transition: all 0.2s ease;
-        }
         .login-link:hover {
           text-decoration: underline;
         }
@@ -164,12 +100,9 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
           text-decoration: underline;
           color: #0056b3;
         }
-        .checkbox:hover {
-          border-color: #007AFF;
-        }
       `;
       document.head.appendChild(style);
-      
+
       return () => {
         document.head.removeChild(style);
       };
@@ -187,45 +120,10 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.headerContainer}>
             <Text style={styles.welcomeText}>Create Account</Text>
-            <Text style={styles.subtitleText}>Sign up to get started</Text>
+            <Text style={styles.subtitleText}>Sign up with your mobile number</Text>
           </View>
 
           <View style={styles.formContainer}>
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Full Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your full name"
-                placeholderTextColor="#999"
-                value={fullName}
-                onChangeText={setFullName}
-                autoCapitalize="words"
-                autoCorrect={false}
-                autoComplete={Platform.OS === 'web' ? 'name' : 'off'}
-                onKeyPress={handleKeyPress}
-                accessibilityLabel="Full name input field"
-                accessibilityHint="Enter your full name"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your email"
-                placeholderTextColor="#999"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete={Platform.OS === 'web' ? 'email' : 'off'}
-                onKeyPress={handleKeyPress}
-                accessibilityLabel="Email input field"
-                accessibilityHint="Enter your email address"
-              />
-            </View>
-
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Mobile Number</Text>
               <TextInput
@@ -244,88 +142,28 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
               />
             </View>
 
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.passwordContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  placeholder="Enter your password"
-                  placeholderTextColor="#999"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoComplete={Platform.OS === 'web' ? 'new-password' : 'off'}
-                  onKeyPress={handleKeyPress}
-                  accessibilityLabel="Password input field"
-                  accessibilityHint="Enter your password"
-                />
-                <TouchableOpacity
-                  onPress={togglePasswordVisibility}
-                  style={styles.eyeButton}
-                  activeOpacity={0.7}
-                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-                  accessibilityHint="Toggle password visibility"
-                >
-                  <Text style={styles.eyeButtonText}>
-                    {showPassword ? '👁️' : '👁️‍🗨️'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <View style={styles.passwordContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  placeholder="Confirm your password"
-                  placeholderTextColor="#999"
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry={!showConfirmPassword}
-                  autoCapitalize="none"
-                  autoComplete={Platform.OS === 'web' ? 'new-password' : 'off'}
-                  onKeyPress={handleKeyPress}
-                  accessibilityLabel="Confirm password input field"
-                  accessibilityHint="Re-enter your password"
-                />
-                <TouchableOpacity
-                  onPress={toggleConfirmPasswordVisibility}
-                  style={styles.eyeButton}
-                  activeOpacity={0.7}
-                  accessibilityLabel={showConfirmPassword ? "Hide password" : "Show password"}
-                  accessibilityHint="Toggle password visibility"
-                >
-                  <Text style={styles.eyeButtonText}>
-                    {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
             <View style={styles.termsContainer}>
               <TouchableOpacity
-                onPress={toggleTermsAgreement}
+                onPress={() => setAgreeToTerms((prev) => !prev)}
                 style={styles.checkbox}
                 activeOpacity={0.7}
                 accessibilityLabel="Terms and conditions checkbox"
                 accessibilityHint="Agree to terms and conditions"
               >
                 <View style={[styles.checkboxInner, agreeToTerms && styles.checkboxChecked]}>
-                  {agreeToTerms && <Text style={styles.checkmark}>✓</Text>}
+                  {agreeToTerms && <Text style={styles.checkmark}>OK</Text>}
                 </View>
               </TouchableOpacity>
               <Text style={styles.termsText}>
                 I agree to the{' '}
-                <Text 
+                <Text
                   style={[styles.termsLink, Platform.OS === 'web' && ({ className: 'terms-link' } as any)]}
                   onPress={handleOpenTermsOfService}
                 >
                   Terms of Service
                 </Text>{' '}
                 and{' '}
-                <Text 
+                <Text
                   style={[styles.termsLink, Platform.OS === 'web' && ({ className: 'terms-link' } as any)]}
                   onPress={handleOpenPrivacyPolicy}
                 >
@@ -344,65 +182,24 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
               accessibilityHint="Tap to create your account"
             >
               <Text style={styles.registerButtonText}>
-                {isSubmitting ? 'Please wait...' : 'Sign Up'}
+                {isSubmitting ? 'Please wait...' : 'Send OTP'}
               </Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.footerContainer}>
-            <View style={styles.dividerContainer}>
-              <View style={styles.divider} />
-              <Text style={styles.dividerText}>OR</Text>
-              <View style={styles.divider} />
-            </View>
-
-            <View style={styles.socialButtonsContainer}>
-              <TouchableOpacity 
-                style={[styles.socialButton, Platform.OS === 'web' && ({ className: 'social-button' } as any)]}
-                onPress={() => handleSocialRegister('Google')}
-                activeOpacity={0.7}
-                {...(Platform.OS === 'web' ? { type: 'button' } : {})}
-                accessibilityLabel="Sign up with Google"
-                accessibilityHint="Continue with Google"
-              >
-                <Text style={styles.socialButtonText}>G</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.socialButton, Platform.OS === 'web' && ({ className: 'social-button' } as any)]}
-                onPress={() => handleSocialRegister('Facebook')}
-                activeOpacity={0.7}
-                {...(Platform.OS === 'web' ? { type: 'button' } : {})}
-                accessibilityLabel="Sign up with Facebook"
-                accessibilityHint="Continue with Facebook"
-              >
-                <Text style={styles.socialButtonText}>f</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.socialButton, Platform.OS === 'web' && ({ className: 'social-button' } as any)]}
-                onPress={() => handleSocialRegister('LinkedIn')}
-                activeOpacity={0.7}
-                {...(Platform.OS === 'web' ? { type: 'button' } : {})}
-                accessibilityLabel="Sign up with LinkedIn"
-                accessibilityHint="Continue with LinkedIn"
-              >
-                <Text style={styles.socialButtonText}>in</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.loginContainer}>
-              <Text style={styles.loginText}>Already have an account? </Text>
-              <TouchableOpacity 
-                onPress={handleLogin}
-                activeOpacity={0.7}
-                {...(Platform.OS === 'web' ? { type: 'button' } : {})}
-                accessibilityLabel="Sign in"
-                accessibilityHint="Navigate to sign in page"
-              >
-                <Text style={[styles.loginLink, Platform.OS === 'web' && ({ className: 'login-link' } as any)]}>
-                  Sign In
-                </Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.loginContainer}>
+            <Text style={styles.loginText}>Already have an account? </Text>
+            <TouchableOpacity
+              onPress={handleLogin}
+              activeOpacity={0.7}
+              {...(Platform.OS === 'web' ? { type: 'button' } : {})}
+              accessibilityLabel="Sign in"
+              accessibilityHint="Navigate to sign in page"
+            >
+              <Text style={[styles.loginLink, Platform.OS === 'web' && ({ className: 'login-link' } as any)]}>
+                Sign In
+              </Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -423,14 +220,16 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingBottom: 24,
-    ...(Platform.OS === 'web' ? {
-      maxWidth: 500,
-      marginHorizontal: 'auto' as any,
-      width: '100%',
-    } : {}),
+    justifyContent: 'center',
+    ...(Platform.OS === 'web'
+      ? {
+          maxWidth: 500,
+          marginHorizontal: 'auto' as any,
+          width: '100%',
+        }
+      : {}),
   },
   headerContainer: {
-    marginTop: Platform.OS === 'web' ? 40 : 60,
     marginBottom: 40,
   },
   welcomeText: {
@@ -444,12 +243,6 @@ const styles = StyleSheet.create({
     fontSize: Platform.OS === 'web' ? 18 : 16,
     color: '#666',
     textAlign: 'center',
-  },
-  noticeText: {
-    fontSize: 14,
-    color: '#d32f2f',
-    textAlign: 'center',
-    marginTop: 8,
   },
   formContainer: {
     width: '100%',
@@ -473,32 +266,6 @@ const styles = StyleSheet.create({
     color: '#333',
     backgroundColor: '#f8f8f8',
   },
-  passwordContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    backgroundColor: '#f8f8f8',
-  },
-  passwordInput: {
-    flex: 1,
-    height: Platform.OS === 'web' ? 48 : 50,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: '#333',
-  } as any,
-  eyeButton: {
-    paddingHorizontal: 16,
-    height: Platform.OS === 'web' ? 48 : 50,
-    justifyContent: 'center',
-    ...(Platform.OS === 'web' ? {
-      cursor: 'pointer',
-    } : {}),
-  },
-  eyeButtonText: {
-    fontSize: 20,
-  },
   termsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -514,9 +281,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    ...(Platform.OS === 'web' ? {
-      cursor: 'pointer',
-    } : {}),
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
   },
   checkboxInner: {
     width: 20,
@@ -530,8 +295,8 @@ const styles = StyleSheet.create({
   },
   checkmark: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 10,
+    fontWeight: '700',
   },
   termsText: {
     flex: 1,
@@ -542,9 +307,7 @@ const styles = StyleSheet.create({
   termsLink: {
     color: '#007AFF',
     fontWeight: '500',
-    ...(Platform.OS === 'web' ? {
-      cursor: 'pointer',
-    } : {}),
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
   },
   registerButton: {
     backgroundColor: '#007AFF',
@@ -552,69 +315,23 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#007AFF',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: Platform.OS === 'web' ? 0.2 : 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-    ...(Platform.OS === 'web' ? {
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-    } : {}),
+    ...(Platform.OS === 'web'
+      ? {
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+        }
+      : {}),
   },
   registerButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
   },
-  footerContainer: {
-    marginTop: 40,
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#ddd',
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    color: '#999',
-    fontSize: 14,
-  },
-  socialButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 20,
-    marginBottom: 30,
-  },
-  socialButton: {
-    width: Platform.OS === 'web' ? 48 : 50,
-    height: Platform.OS === 'web' ? 48 : 50,
-    borderRadius: 25,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...(Platform.OS === 'web' ? {
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-    } : {}),
-  },
-  socialButtonText: {
-    fontSize: Platform.OS === 'web' ? 20 : 18,
-    fontWeight: '600',
-    color: '#333',
-  },
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 28,
     flexWrap: 'wrap',
   },
   loginText: {
@@ -625,43 +342,7 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontSize: 14,
     fontWeight: '600',
-    ...(Platform.OS === 'web' ? {
-      cursor: 'pointer',
-    } : {}),
-  },
-  badRequest: {
-    color: '#FF0000',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  verificationInfoContainer: {
-    backgroundColor: '#E3F2FD',
-    borderRadius: 10,
-    padding: 16,
-    marginBottom: 24,
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
-  },
-  verificationInfoText: {
-    fontSize: 14,
-    color: '#0056B3',
-    lineHeight: 20,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  backButton: {
-    marginTop: 16,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: '#007AFF',
-    fontSize: 14,
-    fontWeight: '500',
-    ...(Platform.OS === 'web' ? {
-      cursor: 'pointer',
-    } : {}),
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
   },
 });
 

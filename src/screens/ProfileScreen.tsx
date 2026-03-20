@@ -302,7 +302,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
           
           <Text style={styles.userName}>{user?.name || 'User'}</Text>
-          <Text style={styles.userEmail}>{user?.email}</Text>
+          <Text style={styles.userEmail}>{user?.phone || 'Phone account'}</Text>
           
           {!isConnected && (
             <View style={styles.offlineBadge}>
@@ -347,7 +347,6 @@ export default function ProfileScreen() {
           
           <View style={styles.infoCard}>
             <InfoRow icon="person" label="Full Name" value={user?.name || 'N/A'} />
-            <InfoRow icon="mail" label="Email" value={user?.email || 'N/A'} />
             <InfoRow icon="call" label="Phone" value={user?.phone || 'Not provided'} />
             <InfoRow 
               icon="calendar" 
@@ -470,6 +469,7 @@ export default function ProfileScreen() {
                 onChangeText={setEditPhone}
                 placeholder="Enter your phone number"
                 keyboardType="phone-pad"
+                editable={false}
               />
 
               <TouchableOpacity

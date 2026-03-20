@@ -18,9 +18,7 @@ export type AuthStackParamList = {
     | {
         verificationId?: string;
         phoneNumber?: string;
-        fullName?: string;
-        email?: string;
-        password?: string;
+        authMode?: 'signIn' | 'signUp';
       }
     | undefined;
   PrivacyPolicy: undefined;

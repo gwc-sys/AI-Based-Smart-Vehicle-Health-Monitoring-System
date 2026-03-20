@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import useAuth from '../hooks/useAuth';
+import CompleteProfileScreen from '../screens/CompleteProfileScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import SplashScreen from '../screens/SplashScreen';
 import TermsOfServiceScreen from '../screens/TermsOfServiceScreen';
@@ -25,13 +26,17 @@ export default function AppNavigator() {
     return <SplashScreen />;
   }
 
-  // treat user as authenticated if they exist
   const isAuthenticated = !!user;
+  const needsProfileCompletion = !!user && !user.profileComplete;
 
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
       {isAuthenticated ? (
-        <RootStack.Screen name="MainApp" component={BottomTabNavigator} />
+        needsProfileCompletion ? (
+          <RootStack.Screen name="CompleteProfile" component={CompleteProfileScreen} />
+        ) : (
+          <RootStack.Screen name="MainApp" component={BottomTabNavigator} />
+        )
       ) : (
         <RootStack.Screen name="Auth" component={AuthNavigator} />
       )}

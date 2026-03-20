@@ -9,6 +9,7 @@ import {
   signInWithPhoneNumber
 } from 'firebase/auth';
 import { Env } from '../config/env';
+import { isValidE164PhoneNumber, normalizePhoneNumber, sanitizeOtpCode } from '../utils/phoneAuth';
 
 const firebaseConfig = {
   apiKey: Env.FIREBASE_API_KEY ?? 'AIzaSyDowbCOXreWmH7FS_4mKgVWkMVJUiiCTXQ',
@@ -23,6 +24,26 @@ let firebaseAppInstance: FirebaseApp | null = null;
 let webRecaptchaVerifier: RecaptchaVerifier | null = null;
 let webConfirmationResult: ConfirmationResult | null = null;
 const WEB_RECAPTCHA_CONTAINER_ID = 'recaptcha-container';
+
+function getWebLocationContext() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  return {
+    host: window.location.hostname,
+    origin: window.location.origin,
+    protocol: window.location.protocol,
+  };
+}
+
+function isFirebasePhoneAuthSecureOrigin(host: string, protocol: string): boolean {
+  if (protocol === 'https:') {
+    return true;
+  }
+
+  return host === 'localhost' || host === '127.0.0.1';
+}
 
 /**
  * Validates Firebase configuration
@@ -99,6 +120,7 @@ function getWebRecaptchaContainer(): HTMLElement {
 
 async function getWebRecaptchaVerifier() {
   const auth = getAuth(getFirebaseApp());
+  auth.languageCode = 'en';
 
   if (webRecaptchaVerifier) {
     const existingContainer = document.getElementById(WEB_RECAPTCHA_CONTAINER_ID);
@@ -177,6 +199,13 @@ export const firebasePhoneAuth = {
   sendOTP: async (phoneNumber: string, verifier?: any): Promise<{ verificationId: string }> => {
     try {
       const auth = getAuth(getFirebaseApp());
+      auth.languageCode = 'en';
+      const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
+      const locationContext = getWebLocationContext();
+
+      if (!isValidE164PhoneNumber(normalizedPhoneNumber)) {
+        throw new Error('Phone number must use international E.164 format like +919876543210');
+      }
 
       let recaptchaVerifier: any;
 
@@ -184,12 +213,21 @@ export const firebasePhoneAuth = {
         // Use provided verifier (for mobile)
         recaptchaVerifier = verifier;
       } else if (typeof window !== 'undefined') {
+        if (
+          locationContext &&
+          !isFirebasePhoneAuthSecureOrigin(locationContext.host, locationContext.protocol)
+        ) {
+          throw new Error(
+            `Web phone authentication requires HTTPS. Current origin "${locationContext.origin}" is not allowed for reCAPTCHA. Use HTTPS or localhost during development.`
+          );
+        }
+
         recaptchaVerifier = await getWebRecaptchaVerifier();
       } else {
         throw new Error('Phone authentication requires a verifier on mobile platforms');
       }
 
-      const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+      const confirmationResult = await signInWithPhoneNumber(auth, normalizedPhoneNumber, recaptchaVerifier);
       if (typeof window !== 'undefined') {
         window.confirmationResult = confirmationResult;
         webConfirmationResult = confirmationResult;
@@ -209,11 +247,21 @@ export const firebasePhoneAuth = {
         hint = ' Too many attempts. Wait and retry later.';
       } else if (code === 'auth/operation-not-allowed') {
         hint = ' Enable Phone provider in Firebase Console > Authentication > Sign-in method.';
+      } else if (code === 'auth/quota-exceeded') {
+        hint = ' SMS quota exceeded for this Firebase project. Try again later or use Firebase test phone numbers while developing.';
       } else if (code === 'auth/invalid-app-credential' || code === 'auth/captcha-check-failed') {
-        hint = ' Check Authorized Domains in Firebase Console and make sure this web host is listed.';
+        const host = locationContext?.host ?? 'this host';
+        const origin = locationContext?.origin;
+        const insecureOriginWarning =
+          locationContext && !isFirebasePhoneAuthSecureOrigin(locationContext.host, locationContext.protocol)
+            ? ` Also switch to HTTPS because "${origin}" is not a secure origin for Firebase phone auth.`
+            : '';
+        hint = ` Check Firebase Console > Authentication > Settings > Authorized domains and make sure "${host}" is listed.${insecureOriginWarning} Disable ad-block/tracker-blocking extensions and retry the reCAPTCHA challenge.`;
       } else if (rawMessage.toLowerCase().includes('network error')) {
         const host = typeof window !== 'undefined' ? window.location.hostname : 'this host';
         hint = ` Verify that "${host}" is added in Firebase Console > Authentication > Settings > Authorized domains, then retry without tracker-blocking extensions for the reCAPTCHA step.`;
+      } else if (rawMessage.toLowerCase().includes('billing')) {
+        hint = ' Verify your Firebase project billing/quota settings for phone authentication.';
       }
 
       throw new Error(`Failed to send OTP${code ? ` (${code})` : ''}: ${rawMessage}.${hint}`);
@@ -230,17 +278,23 @@ export const firebasePhoneAuth = {
    */
   verifyOTP: async (verificationId: string, otpCode: string): Promise<any> => {
     try {
+      const sanitizedOtpCode = sanitizeOtpCode(otpCode);
+
+      if (sanitizedOtpCode.length !== 6) {
+        throw new Error('OTP code must be exactly 6 digits');
+      }
+
       if (typeof window !== 'undefined') {
         const confirmationResult = window.confirmationResult ?? webConfirmationResult;
         if (confirmationResult) {
-          const result = await confirmationResult.confirm(otpCode);
+          const result = await confirmationResult.confirm(sanitizedOtpCode);
           clearWebRecaptchaVerifier();
           return result;
         }
       }
 
       const auth = getAuth(getFirebaseApp());
-      const credential = PhoneAuthProvider.credential(verificationId, otpCode);
+      const credential = PhoneAuthProvider.credential(verificationId, sanitizedOtpCode);
       const result = await signInWithCredential(auth, credential);
       if (typeof window !== 'undefined') {
         clearWebRecaptchaVerifier();
