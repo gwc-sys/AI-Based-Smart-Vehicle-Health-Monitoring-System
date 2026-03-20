@@ -1,11 +1,11 @@
 import { useNavigation } from '@react-navigation/native';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import React, { useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
   NativeSyntheticEvent,
   Platform,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -15,6 +15,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import SocialAuthButtons from '../components/SocialAuthButtons';
+import firebaseConfig, { prepareWebRecaptchaVerifier } from '../services/firebaseConfig';
 import useAuth from '../hooks/useAuth';
 import { isValidE164PhoneNumber, normalizePhoneNumber } from '../utils/phoneAuth';
 
@@ -28,41 +31,64 @@ type WebTouchableProps = {
 };
 
 const LoginScreen: React.FC<LoginScreenProps> = () => {
+  const [countryCode, setCountryCode] = useState<string>('+91');
   const [phoneNumber, setPhoneNumber] = useState<string>('');
+  const [isRecaptchaReady, setIsRecaptchaReady] = useState<boolean>(Platform.OS === 'web');
+  const [isWebRecaptchaLoading, setIsWebRecaptchaLoading] = useState<boolean>(Platform.OS === 'web');
+  const [webRecaptchaError, setWebRecaptchaError] = useState<string | null>(null);
 
   const navigation = useNavigation<any>();
-  useAuth();
+  const { loading, sendPhoneOTP, signInWithOAuth } = useAuth();
+  const recaptchaVerifier = React.useRef<FirebaseRecaptchaVerifierModal | null>(null);
 
   const handleSignUp = (): void => {
     navigation.navigate('Register');
   };
 
   const handlePhoneLogin = async (): Promise<void> => {
-    const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
+    const normalizedCountryCode = normalizePhoneNumber(countryCode).startsWith('+')
+      ? normalizePhoneNumber(countryCode)
+      : `+${normalizePhoneNumber(countryCode)}`;
+    const localPhoneNumber = phoneNumber.replace(/\D/g, '');
+    const normalizedPhoneNumber = `${normalizedCountryCode}${localPhoneNumber}`;
 
-    if (!normalizedPhoneNumber) {
+    if (!localPhoneNumber) {
       Alert.alert('Validation', 'Please enter your phone number');
       return;
     }
 
     if (!isValidE164PhoneNumber(normalizedPhoneNumber)) {
-      Alert.alert('Validation', 'Please enter a valid phone number in international format (e.g., +1234567890)');
+      Alert.alert('Validation', 'Please enter a valid country code and phone number.');
       return;
     }
 
     try {
+      const { verificationId } = await sendPhoneOTP(
+        normalizedPhoneNumber,
+        Platform.OS !== 'web' ? recaptchaVerifier.current : undefined,
+      );
+
       navigation.navigate('PhoneOTP', {
         phoneNumber: normalizedPhoneNumber,
+        verificationId,
         authMode: 'signIn',
       });
     } catch (err) {
-      Alert.alert('Error', (err as Error).message || 'Unable to continue to phone verification');
+      Alert.alert('Failed to send OTP', (err as Error).message || 'Unable to continue to phone verification');
     }
   };
 
   const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>): void => {
     if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter') {
       handlePhoneLogin();
+    }
+  };
+
+  const handleOAuthLogin = async (provider: 'google' | 'apple'): Promise<void> => {
+    try {
+      await signInWithOAuth(provider);
+    } catch (err) {
+      Alert.alert('Sign in failed', (err as Error).message || 'Unable to continue with social sign-in');
     }
   };
 
@@ -87,6 +113,27 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
     }
   }, []);
 
+  React.useEffect(() => {
+    const initializeWebRecaptcha = async () => {
+      if (Platform.OS !== 'web') {
+        return;
+      }
+
+      setIsWebRecaptchaLoading(true);
+      setWebRecaptchaError(null);
+
+      try {
+        await prepareWebRecaptchaVerifier();
+      } catch (error) {
+        setWebRecaptchaError((error as Error).message || 'Failed to load verification.');
+      } finally {
+        setIsWebRecaptchaLoading(false);
+      }
+    };
+
+    initializeWebRecaptcha();
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
@@ -108,32 +155,56 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
           <View style={styles.formContainer}>
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Phone Number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your phone number (e.g., +1234567890)"
-                placeholderTextColor="#999"
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                keyboardType="phone-pad"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete={Platform.OS === 'web' ? 'tel' : 'off'}
-                onKeyPress={handleKeyPress}
-                accessibilityLabel="Phone number input field"
-                accessibilityHint="Enter your phone number in international format"
-              />
+              <View style={styles.phoneRow}>
+                <TextInput
+                  style={styles.countryCodeInput}
+                  placeholder="+91"
+                  placeholderTextColor="#999"
+                  value={countryCode}
+                  onChangeText={setCountryCode}
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  accessibilityLabel="Country code input field"
+                  accessibilityHint="Enter your country dialing code"
+                />
+                <TextInput
+                  style={styles.phoneInput}
+                  placeholder="Enter your phone number"
+                  placeholderTextColor="#999"
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete={Platform.OS === 'web' ? 'tel' : 'off'}
+                  onKeyPress={handleKeyPress}
+                  accessibilityLabel="Phone number input field"
+                  accessibilityHint="Enter your local phone number"
+                />
+              </View>
             </View>
 
             <TouchableOpacity
               style={[styles.loginButton, Platform.OS === 'web' && ({ className: 'login-button' } as any)]}
               onPress={handlePhoneLogin}
               activeOpacity={0.8}
+              disabled={loading || isWebRecaptchaLoading || !!webRecaptchaError || (Platform.OS !== 'web' && !isRecaptchaReady)}
               {...(Platform.OS === 'web' ? { type: 'button' } : {})}
               accessibilityLabel="Send OTP button"
               accessibilityHint="Tap to receive verification code"
             >
               <Text style={styles.loginButtonText}>Send OTP</Text>
             </TouchableOpacity>
+
+            {Platform.OS === 'web' && (
+              <>
+                <View nativeID="recaptcha-container" style={styles.webRecaptchaContainer} {...({ id: 'recaptcha-container' } as any)} />
+                {webRecaptchaError && <Text style={styles.errorText}>{webRecaptchaError}</Text>}
+              </>
+            )}
+
+            <SocialAuthButtons onPress={handleOAuthLogin} loading={loading} mode="login" />
           </View>
 
           <View style={styles.footerContainer}>
@@ -154,6 +225,17 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {Platform.OS !== 'web' && (
+        <FirebaseRecaptchaVerifierModal
+          ref={(instance) => {
+            recaptchaVerifier.current = instance;
+            setIsRecaptchaReady(!!instance);
+          }}
+          firebaseConfig={firebaseConfig}
+          attemptInvisibleVerification
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -217,6 +299,33 @@ const styles = StyleSheet.create({
     color: '#333',
     backgroundColor: '#f8f8f8',
   },
+  phoneRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  countryCodeInput: {
+    width: 92,
+    height: Platform.OS === 'web' ? 48 : 50,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    color: '#333',
+    backgroundColor: '#f8f8f8',
+    textAlign: 'center',
+  },
+  phoneInput: {
+    flex: 1,
+    height: Platform.OS === 'web' ? 48 : 50,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#333',
+    backgroundColor: '#f8f8f8',
+  },
   loginButton: {
     backgroundColor: '#007AFF',
     height: Platform.OS === 'web' ? 52 : 55,
@@ -242,6 +351,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
+  },
+  webRecaptchaContainer: {
+    width: 1,
+    height: 1,
+    opacity: 0,
+    overflow: 'hidden',
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#d32f2f',
+    textAlign: 'center',
   },
   footerContainer: {
     marginTop: 40,

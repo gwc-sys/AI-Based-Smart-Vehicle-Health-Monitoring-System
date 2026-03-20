@@ -5,7 +5,6 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -14,8 +13,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import useAuth from '../hooks/useAuth';
-import firebaseConfig, { isWebRecaptchaSolved, prepareWebRecaptchaVerifier } from '../services/firebaseConfig';
+import firebaseConfig, { prepareWebRecaptchaVerifier } from '../services/firebaseConfig';
 import { isValidE164PhoneNumber, normalizePhoneNumber, sanitizeOtpCode } from '../utils/phoneAuth';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -42,13 +42,11 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const { sendPhoneOTP, signOut, verifyPhoneOTP } = useAuth();
 
   const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
-  const hasRequestedInitialOtp = useRef<boolean>(false);
   const usesNativeRecaptcha = Platform.OS !== 'web';
 
   const phoneNumber = normalizePhoneNumber(route.params?.phoneNumber ?? '');
   const verificationId = route.params?.verificationId;
   const authMode: 'signIn' | 'signUp' = route.params?.authMode === 'signUp' ? 'signUp' : 'signIn';
-  const shouldAutoSendOtp = usesNativeRecaptcha;
   const isOtpSent = !!verificationId;
 
   useEffect(() => {
@@ -102,11 +100,6 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
       return;
     }
 
-    if (Platform.OS === 'web' && !isWebRecaptchaSolved()) {
-      Alert.alert('Complete reCAPTCHA', 'Please solve the visible reCAPTCHA challenge before sending the OTP.');
-      return;
-    }
-
     setIsSendingOtp(true);
     try {
       const { verificationId: nextVerificationId } = await sendPhoneOTP(
@@ -152,27 +145,18 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
       return;
     }
 
-    let timer: number;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     if (isOtpSent && resendTimer > 0) {
       timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
     } else if (isOtpSent) {
       setCanResend(true);
     }
-    return () => clearTimeout(timer);
-  }, [isOtpLimitReached, isOtpSent, resendTimer]);
-
-  useEffect(() => {
-    const sendInitialOTP = async () => {
-      if (!shouldAutoSendOtp || !phoneNumber || hasRequestedInitialOtp.current || verificationId) {
-        return;
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
       }
-
-      hasRequestedInitialOtp.current = true;
-      await sendOtp();
     };
-
-    sendInitialOTP();
-  }, [phoneNumber, sendOtp, shouldAutoSendOtp, verificationId]);
+  }, [isOtpLimitReached, isOtpSent, resendTimer]);
 
   useEffect(() => {
     return () => {
@@ -265,39 +249,13 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
                   style={styles.webRecaptchaContainer}
                   {...({ id: 'recaptcha-container' } as any)}
                 />
-                {isWebRecaptchaLoading && (
-                  <Text style={styles.helperText}>Loading reCAPTCHA...</Text>
-                )}
                 {webRecaptchaError && (
                   <Text style={styles.errorText}>{webRecaptchaError}</Text>
-                )}
-                {!isOtpSent && (
-                  <Text style={styles.helperText}>
-                    Solve the visible reCAPTCHA above, then tap Send OTP.
-                  </Text>
                 )}
               </>
             )}
 
-            {!isOtpSent && (
-              <TouchableOpacity
-                style={[styles.verifyButton, isSendingOtp && styles.buttonDisabled]}
-                onPress={sendOtp}
-                activeOpacity={0.8}
-                disabled={
-                  isSendingOtp ||
-                  (usesNativeRecaptcha && !isRecaptchaReady) ||
-                  isWebRecaptchaLoading ||
-                  !!webRecaptchaError
-                }
-                accessibilityLabel="Send OTP button"
-                accessibilityHint="Tap to send a verification code"
-              >
-                <Text style={styles.verifyButtonText}>
-                  {isSendingOtp ? 'Sending...' : 'Send OTP'}
-                </Text>
-              </TouchableOpacity>
-            )}
+            {!isOtpSent && <Text style={styles.errorText}>OTP session missing. Please go back and send OTP again.</Text>}
 
             {isOtpSent && (
               <>
@@ -372,7 +330,7 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
               setIsRecaptchaReady(!!instance);
             }}
             firebaseConfig={firebaseConfig}
-            attemptInvisibleVerification={false}
+            attemptInvisibleVerification
           />
         )}
       </KeyboardAvoidingView>
@@ -423,16 +381,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   webRecaptchaContainer: {
-    minHeight: 78,
-    marginBottom: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  helperText: {
-    marginBottom: 20,
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
+    width: 1,
+    height: 1,
+    opacity: 0,
+    overflow: 'hidden',
   },
   errorText: {
     marginBottom: 20,

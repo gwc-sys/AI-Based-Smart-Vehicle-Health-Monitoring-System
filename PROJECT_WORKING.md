@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This project is an Expo + React Native application for monitoring vehicle health, managing user authentication, and preparing vehicle-related insights inside a mobile and web-friendly interface.
+This project is an Expo CLI + React Native application for monitoring vehicle health, managing user authentication, and preparing vehicle-related insights inside a mobile and web-friendly interface.
 
 The app currently includes:
 
@@ -16,7 +16,6 @@ The app currently includes:
 
 - Expo
 - React Native
-- Expo Router
 - React Navigation
 - Firebase Web SDK
 - AsyncStorage
@@ -24,9 +23,7 @@ The app currently includes:
 
 ## Main Entry Flow
 
-The app starts from [`src/app/index.tsx`](/d:/college%20Project/IOT%20Application/AI-Vehicle-Health-Monitoring-App/src/app/index.tsx), which mounts React Navigation inside Expo Router.
-
-Firebase initialization happens in [`src/app/_layout.tsx`](/d:/college%20Project/IOT%20Application/AI-Vehicle-Health-Monitoring-App/src/app/_layout.tsx) before the rest of the app renders.
+The app starts from [`App.tsx`](/d:/college%20Project/IOT%20Application/AI-Vehicle-Health-Monitoring-App/App.tsx), which initializes Firebase, mounts the providers, and renders the React Navigation tree.
 
 Once Firebase is ready:
 
@@ -35,11 +32,6 @@ Once Firebase is ready:
 - `AppNavigator` decides whether to show auth screens or the main app
 
 ## Folder Structure
-
-### `src/app`
-
-- `_layout.tsx`: Initializes Firebase and wraps global providers
-- `index.tsx`: Mounts the app navigation tree
 
 ### `src/navigation`
 
@@ -198,8 +190,7 @@ npm run lint
 
 ## Important Files
 
-- [`src/app/_layout.tsx`](/d:/college%20Project/IOT%20Application/AI-Vehicle-Health-Monitoring-App/src/app/_layout.tsx)
-- [`src/app/index.tsx`](/d:/college%20Project/IOT%20Application/AI-Vehicle-Health-Monitoring-App/src/app/index.tsx)
+- [`App.tsx`](/d:/college%20Project/IOT%20Application/AI-Vehicle-Health-Monitoring-App/App.tsx)
 - [`src/navigation/AppNavigator.tsx`](/d:/college%20Project/IOT%20Application/AI-Vehicle-Health-Monitoring-App/src/navigation/AppNavigator.tsx)
 - [`src/context/AuthContext.tsx`](/d:/college%20Project/IOT%20Application/AI-Vehicle-Health-Monitoring-App/src/context/AuthContext.tsx)
 - [`src/context/VehicleContext.tsx`](/d:/college%20Project/IOT%20Application/AI-Vehicle-Health-Monitoring-App/src/context/VehicleContext.tsx)

@@ -1,10 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  getAdditionalUserInfo,
   getAuth,
+  GoogleAuthProvider,
+  OAuthProvider,
   onAuthStateChanged,
+  signInWithPopup,
   signOut as firebaseSignOut,
   updateProfile,
 } from 'firebase/auth';
+import { Platform } from 'react-native';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { firebasePhoneAuth, getFirebaseApp } from '../services/firebaseConfig';
 
@@ -35,6 +40,13 @@ type PhoneVerificationResult = {
   user: User;
 };
 
+type OAuthProviderName = 'google' | 'apple';
+
+type OAuthSignInResult = {
+  isNewUser: boolean;
+  user: User;
+};
+
 type AuthContextType = {
   user: User | null;
   initializing: boolean;
@@ -47,6 +59,7 @@ type AuthContextType = {
   updateUserPreferences: (prefs: any) => Promise<void>;
   sendPhoneOTP: (phoneNumber: string, verifier?: any) => Promise<{ verificationId: string }>;
   verifyPhoneOTP: (verificationId: string, otpCode: string) => Promise<PhoneVerificationResult>;
+  signInWithOAuth: (providerName: OAuthProviderName) => Promise<OAuthSignInResult>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -166,6 +179,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const signInWithOAuth = async (providerName: OAuthProviderName): Promise<OAuthSignInResult> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (Platform.OS !== 'web') {
+        throw new Error('Google and Apple sign-in are currently available on web only in this app.');
+      }
+
+      const auth = getAuth(getFirebaseApp());
+      let provider: GoogleAuthProvider | OAuthProvider;
+
+      switch (providerName) {
+        case 'google':
+          provider = new GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: 'select_account' });
+          break;
+        case 'apple':
+          provider = new OAuthProvider('apple.com');
+          provider.addScope('email');
+          provider.addScope('name');
+          break;
+        default:
+          throw new Error('Unsupported OAuth provider');
+      }
+
+      const result = await signInWithPopup(auth, provider);
+      const firebaseUser = result.user;
+
+      if (!firebaseUser) {
+        throw new Error('OAuth sign-in succeeded but no Firebase user was returned');
+      }
+
+      const mapped = mapFirebaseUser(firebaseUser);
+      await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
+      setUser(mapped);
+
+      return {
+        isNewUser: !!getAdditionalUserInfo(result)?.isNewUser,
+        user: mapped,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'OAuth sign-in failed';
+      setError(msg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const sendPhoneOTP = async (phoneNumber: string, verifier?: any) => {
     setLoading(true);
     setError(null);
@@ -224,6 +287,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         updateUserPreferences,
         sendPhoneOTP,
         verifyPhoneOTP,
+        signInWithOAuth,
       }}
     >
       {children}

@@ -5,13 +5,13 @@ import React, { useEffect, useState } from 'react';
 import {
   Dimensions,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { BarChart, LineChart, PieChart } from 'react-native-chart-kit';
 import { Colors } from '../../constants/theme';
 

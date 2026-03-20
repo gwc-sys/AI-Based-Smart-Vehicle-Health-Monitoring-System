@@ -36,7 +36,6 @@
       "fontFamily": "system-ui"
     },
     "plugins": [
-      "expo-router",
       [
         "expo-splash-screen",
         {
@@ -48,11 +47,9 @@
             "backgroundColor": "#000000"
           }
         }
-      ],
-      "expo-router"
+      ]
     ],
     "experiments": {
-      "typedRoutes": true,
       "reactCompiler": true
     },
     "extra": {

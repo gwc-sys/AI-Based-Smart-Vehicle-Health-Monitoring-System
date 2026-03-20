@@ -7,7 +7,6 @@ node_modules/
 .expo/
 dist/
 web-build/
-expo-env.d.ts
 
 
 # Native
@@ -39,24 +38,12 @@ yarn-error.*
 
 app-example
 
-# generated native folders
-/ios
-/android
-# For React Native projects, create .gitignore with:
-cat > .gitignore << EOF
-node_modules/
-package-lock.json
+# Native build outputs
 ios/Pods/
 ios/DerivedData/
 android/app/build/
 android/.gradle/
-.env
-.DS_Store
-*.log
-*.iml
-.idea/
-.vscode/
-EOF
+.gradle-local/
 
 # Firebase
 google-services.json
