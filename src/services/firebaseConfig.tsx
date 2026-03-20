@@ -144,14 +144,23 @@ async function getWebRecaptchaVerifier() {
 
   const container = getWebRecaptchaContainer();
   container.innerHTML = '';
+  if (typeof window !== 'undefined') {
+    (window as any).__webRecaptchaSolved = false;
+  }
 
   webRecaptchaVerifier = new RecaptchaVerifier(auth, container, {
-    size: 'invisible',
+    size: 'normal',
     callback: () => {
+      if (typeof window !== 'undefined') {
+        (window as any).__webRecaptchaSolved = true;
+      }
       console.log('[Firebase] reCAPTCHA solved');
     },
     'expired-callback': () => {
       console.warn('[Firebase] reCAPTCHA expired');
+      if (typeof window !== 'undefined') {
+        (window as any).__webRecaptchaSolved = false;
+      }
       try {
         webRecaptchaVerifier?.clear();
       } catch (error) {
@@ -166,10 +175,27 @@ async function getWebRecaptchaVerifier() {
   return webRecaptchaVerifier;
 }
 
+export async function prepareWebRecaptchaVerifier(): Promise<void> {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  await getWebRecaptchaVerifier();
+}
+
+export function isWebRecaptchaSolved(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return !!(window as any).__webRecaptchaSolved;
+}
+
 function clearWebRecaptchaVerifier() {
   if (typeof window !== 'undefined') {
     window.recaptchaVerifier = undefined;
     window.confirmationResult = undefined;
+    (window as any).__webRecaptchaSolved = false;
   }
 
   webConfirmationResult = null;
@@ -243,6 +269,8 @@ export const firebasePhoneAuth = {
 
       if (code === 'auth/invalid-phone-number') {
         hint = ' Use international format like +919876543210.';
+      } else if (rawMessage.toLowerCase().includes('recaptcha') || rawMessage.toLowerCase().includes('captcha')) {
+        hint = ' Complete the visible reCAPTCHA challenge on the page, then try sending the OTP again.';
       } else if (code === 'auth/too-many-requests') {
         hint = ' Too many attempts. Wait and retry later.';
       } else if (code === 'auth/operation-not-allowed') {

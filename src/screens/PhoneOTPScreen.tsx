@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import useAuth from '../hooks/useAuth';
-import firebaseConfig from '../services/firebaseConfig';
+import firebaseConfig, { isWebRecaptchaSolved, prepareWebRecaptchaVerifier } from '../services/firebaseConfig';
 import { isValidE164PhoneNumber, normalizePhoneNumber, sanitizeOtpCode } from '../utils/phoneAuth';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -32,6 +32,8 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const [isSendingOtp, setIsSendingOtp] = useState<boolean>(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
   const [isRecaptchaReady, setIsRecaptchaReady] = useState<boolean>(Platform.OS === 'web');
+  const [isWebRecaptchaLoading, setIsWebRecaptchaLoading] = useState<boolean>(Platform.OS === 'web');
+  const [webRecaptchaError, setWebRecaptchaError] = useState<string | null>(null);
   const [otpSendCount, setOtpSendCount] = useState<number>(0);
   const [isOtpLimitReached, setIsOtpLimitReached] = useState<boolean>(false);
 
@@ -46,6 +48,29 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const phoneNumber = normalizePhoneNumber(route.params?.phoneNumber ?? '');
   const verificationId = route.params?.verificationId;
   const authMode: 'signIn' | 'signUp' = route.params?.authMode === 'signUp' ? 'signUp' : 'signIn';
+  const shouldAutoSendOtp = usesNativeRecaptcha;
+  const isOtpSent = !!verificationId;
+
+  useEffect(() => {
+    const initializeWebRecaptcha = async () => {
+      if (Platform.OS !== 'web') {
+        return;
+      }
+
+      setIsWebRecaptchaLoading(true);
+      setWebRecaptchaError(null);
+
+      try {
+        await prepareWebRecaptchaVerifier();
+      } catch (error) {
+        setWebRecaptchaError((error as Error).message || 'Failed to load reCAPTCHA.');
+      } finally {
+        setIsWebRecaptchaLoading(false);
+      }
+    };
+
+    initializeWebRecaptcha();
+  }, []);
 
   const blurFocusedElement = useCallback(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
@@ -67,6 +92,60 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
     navigation.navigate(authMode === 'signUp' ? 'Register' : 'Login');
   }, [authMode, blurFocusedElement, navigation]);
 
+  const sendOtp = useCallback(async () => {
+    if (!phoneNumber) return;
+    if (usesNativeRecaptcha && (!isRecaptchaReady || !recaptchaVerifier.current)) return;
+
+    if (!isValidE164PhoneNumber(phoneNumber)) {
+      Alert.alert('Invalid phone number', 'Please enter a valid phone number in international format (e.g., +1234567890).');
+      navigateBackSafely();
+      return;
+    }
+
+    if (Platform.OS === 'web' && !isWebRecaptchaSolved()) {
+      Alert.alert('Complete reCAPTCHA', 'Please solve the visible reCAPTCHA challenge before sending the OTP.');
+      return;
+    }
+
+    setIsSendingOtp(true);
+    try {
+      const { verificationId: nextVerificationId } = await sendPhoneOTP(
+        phoneNumber,
+        usesNativeRecaptcha ? recaptchaVerifier.current : undefined,
+      );
+
+      setOtpSendCount((count) => count + 1);
+      setResendTimer(RESEND_WAIT_SECONDS);
+      setCanResend(false);
+      setOtpCode('');
+
+      navigation.setParams({
+        verificationId: nextVerificationId,
+        phoneNumber,
+        authMode,
+      });
+
+      if (!verificationId) {
+        Alert.alert('OTP sent', 'We sent a verification code to your mobile number.');
+      } else {
+        Alert.alert('Success', 'OTP sent successfully!');
+      }
+    } catch (err) {
+      Alert.alert('Failed to send OTP', (err as Error).message || 'Unable to send OTP');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  }, [
+    authMode,
+    isRecaptchaReady,
+    navigation,
+    navigateBackSafely,
+    phoneNumber,
+    sendPhoneOTP,
+    usesNativeRecaptcha,
+    verificationId,
+  ]);
+
   useEffect(() => {
     if (isOtpLimitReached) {
       setCanResend(false);
@@ -74,66 +153,26 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
     }
 
     let timer: number;
-    if (resendTimer > 0) {
+    if (isOtpSent && resendTimer > 0) {
       timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
-    } else {
+    } else if (isOtpSent) {
       setCanResend(true);
     }
     return () => clearTimeout(timer);
-  }, [isOtpLimitReached, resendTimer]);
+  }, [isOtpLimitReached, isOtpSent, resendTimer]);
 
   useEffect(() => {
     const sendInitialOTP = async () => {
-      if (!phoneNumber || hasRequestedInitialOtp.current) return;
-      if (usesNativeRecaptcha && (!isRecaptchaReady || !recaptchaVerifier.current)) return;
-      if (!isValidE164PhoneNumber(phoneNumber)) {
-        Alert.alert('Invalid phone number', 'Please enter a valid phone number in international format (e.g., +1234567890).');
-        navigateBackSafely();
+      if (!shouldAutoSendOtp || !phoneNumber || hasRequestedInitialOtp.current || verificationId) {
         return;
       }
 
       hasRequestedInitialOtp.current = true;
-      setIsSendingOtp(true);
-
-      try {
-        const { verificationId: nextVerificationId } = await sendPhoneOTP(
-          phoneNumber,
-          usesNativeRecaptcha ? recaptchaVerifier.current : undefined,
-        );
-
-        setOtpSendCount(1);
-        setResendTimer(RESEND_WAIT_SECONDS);
-        setCanResend(false);
-
-        navigation.setParams({
-          verificationId: nextVerificationId,
-          phoneNumber,
-          authMode,
-        });
-      } catch (err) {
-        hasRequestedInitialOtp.current = false;
-        blurFocusedElement();
-        Alert.alert('Failed to send OTP', (err as Error).message || 'Unable to send OTP');
-        navigateBackSafely();
-      } finally {
-        setIsSendingOtp(false);
-      }
+      await sendOtp();
     };
 
-    if (phoneNumber && !verificationId) {
-      sendInitialOTP();
-    }
-  }, [
-    authMode,
-    blurFocusedElement,
-    isRecaptchaReady,
-    navigateBackSafely,
-    navigation,
-    phoneNumber,
-    sendPhoneOTP,
-    usesNativeRecaptcha,
-    verificationId,
-  ]);
+    sendInitialOTP();
+  }, [phoneNumber, sendOtp, shouldAutoSendOtp, verificationId]);
 
   useEffect(() => {
     return () => {
@@ -150,8 +189,7 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
     }
 
     if (!verificationId) {
-      Alert.alert('Error', 'OTP verification session expired. Please try again.');
-      navigateBackSafely();
+      Alert.alert('Error', 'Send the OTP first, then enter the verification code.');
       return;
     }
 
@@ -190,12 +228,6 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
 
   const handleResendOTP = async (): Promise<void> => {
     if (!canResend || !phoneNumber) return;
-    if (usesNativeRecaptcha && !recaptchaVerifier.current) return;
-    if (!isValidE164PhoneNumber(phoneNumber)) {
-      Alert.alert('Invalid phone number', 'Please re-enter your phone number in international format.');
-      navigateBackSafely();
-      return;
-    }
     if (isOtpLimitReached || otpSendCount >= MAX_OTP_SENDS) {
       blurFocusedElement();
       setCanResend(false);
@@ -204,37 +236,7 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
       return;
     }
 
-    setIsSendingOtp(true);
-    try {
-      blurFocusedElement();
-      const { verificationId: nextVerificationId } = await sendPhoneOTP(
-        phoneNumber,
-        usesNativeRecaptcha ? recaptchaVerifier.current : undefined,
-      );
-      const nextSendCount = otpSendCount + 1;
-      setOtpSendCount(nextSendCount);
-      setOtpCode('');
-
-      if (nextSendCount >= MAX_OTP_SENDS) {
-        setCanResend(false);
-        setIsOtpLimitReached(true);
-        Alert.alert('OTP Sent', `OTP sent successfully. You have reached the OTP limit. Please try again after ${OTP_LOCK_MINUTES} minutes.`);
-      } else {
-        setResendTimer(RESEND_WAIT_SECONDS);
-        setCanResend(false);
-        Alert.alert('Success', 'OTP sent successfully!');
-      }
-
-      navigation.setParams({
-        verificationId: nextVerificationId,
-        phoneNumber,
-        authMode,
-      });
-    } catch (err) {
-      Alert.alert('Failed to resend OTP', (err as Error).message || 'Unable to send OTP');
-    } finally {
-      setIsSendingOtp(false);
-    }
+    await sendOtp();
   };
 
   return (
@@ -249,68 +251,107 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
           <View style={styles.headerContainer}>
             <Text style={styles.welcomeText}>Verify Phone Number</Text>
             <Text style={styles.subtitleText}>
-              Enter the 6-digit code sent to{'\n'}{phoneNumber}
+              {isOtpSent
+                ? `Enter the 6-digit code sent to\n${phoneNumber}`
+                : `Complete verification for\n${phoneNumber}`}
             </Text>
           </View>
 
           <View style={styles.formContainer}>
             {Platform.OS === 'web' && (
-              <View
-                nativeID="recaptcha-container"
-                style={styles.webRecaptchaContainer}
-                {...({ id: 'recaptcha-container' } as any)}
-              />
+              <>
+                <View
+                  nativeID="recaptcha-container"
+                  style={styles.webRecaptchaContainer}
+                  {...({ id: 'recaptcha-container' } as any)}
+                />
+                {isWebRecaptchaLoading && (
+                  <Text style={styles.helperText}>Loading reCAPTCHA...</Text>
+                )}
+                {webRecaptchaError && (
+                  <Text style={styles.errorText}>{webRecaptchaError}</Text>
+                )}
+                {!isOtpSent && (
+                  <Text style={styles.helperText}>
+                    Solve the visible reCAPTCHA above, then tap Send OTP.
+                  </Text>
+                )}
+              </>
             )}
 
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>OTP Code</Text>
-              <TextInput
-                style={styles.otpInput}
-                placeholder="000000"
-                placeholderTextColor="#999"
-                value={otpCode}
-                onChangeText={(text) => setOtpCode(sanitizeOtpCode(text))}
-                keyboardType="number-pad"
-                maxLength={6}
-                autoFocus={Platform.OS !== 'web'}
-                accessibilityLabel="OTP input field"
-                accessibilityHint="Enter the 6-digit verification code"
-              />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.verifyButton, isVerifyingOtp && styles.buttonDisabled]}
-              onPress={handleVerifyOTP}
-              activeOpacity={0.8}
-              disabled={isVerifyingOtp || isSendingOtp || otpCode.length !== 6}
-              accessibilityLabel="Verify OTP button"
-              accessibilityHint="Tap to verify your phone number"
-            >
-              <Text style={styles.verifyButtonText}>
-                {isVerifyingOtp ? 'Verifying...' : 'Verify OTP'}
-              </Text>
-            </TouchableOpacity>
-
-            <View style={styles.resendContainer}>
-              <Text style={styles.resendText}>Didn&apos;t receive the code? </Text>
-              {isOtpLimitReached ? (
-                <Text style={styles.limitMessage}>
-                  Your OTP limit has been reached. Try again after 30 minutes.
+            {!isOtpSent && (
+              <TouchableOpacity
+                style={[styles.verifyButton, isSendingOtp && styles.buttonDisabled]}
+                onPress={sendOtp}
+                activeOpacity={0.8}
+                disabled={
+                  isSendingOtp ||
+                  (usesNativeRecaptcha && !isRecaptchaReady) ||
+                  isWebRecaptchaLoading ||
+                  !!webRecaptchaError
+                }
+                accessibilityLabel="Send OTP button"
+                accessibilityHint="Tap to send a verification code"
+              >
+                <Text style={styles.verifyButtonText}>
+                  {isSendingOtp ? 'Sending...' : 'Send OTP'}
                 </Text>
-              ) : canResend ? (
+              </TouchableOpacity>
+            )}
+
+            {isOtpSent && (
+              <>
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>OTP Code</Text>
+                  <TextInput
+                    style={styles.otpInput}
+                    placeholder="000000"
+                    placeholderTextColor="#999"
+                    value={otpCode}
+                    onChangeText={(text) => setOtpCode(sanitizeOtpCode(text))}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    autoFocus={Platform.OS !== 'web'}
+                    accessibilityLabel="OTP input field"
+                    accessibilityHint="Enter the 6-digit verification code"
+                  />
+                </View>
+
                 <TouchableOpacity
-                  onPress={handleResendOTP}
-                  activeOpacity={0.7}
-                  disabled={isSendingOtp || isVerifyingOtp}
-                  accessibilityLabel="Resend OTP"
-                  accessibilityHint="Send a new verification code"
+                  style={[styles.verifyButton, isVerifyingOtp && styles.buttonDisabled]}
+                  onPress={handleVerifyOTP}
+                  activeOpacity={0.8}
+                  disabled={isVerifyingOtp || isSendingOtp || otpCode.length !== 6}
+                  accessibilityLabel="Verify OTP button"
+                  accessibilityHint="Tap to verify your phone number"
                 >
-                  <Text style={styles.resendLink}>{isSendingOtp ? 'Sending...' : 'Resend OTP'}</Text>
+                  <Text style={styles.verifyButtonText}>
+                    {isVerifyingOtp ? 'Verifying...' : 'Verify OTP'}
+                  </Text>
                 </TouchableOpacity>
-              ) : (
-                <Text style={styles.resendTimer}>Resend in {resendTimer}s</Text>
-              )}
-            </View>
+
+                <View style={styles.resendContainer}>
+                  <Text style={styles.resendText}>Didn&apos;t receive the code? </Text>
+                  {isOtpLimitReached ? (
+                    <Text style={styles.limitMessage}>
+                      Your OTP limit has been reached. Try again after 30 minutes.
+                    </Text>
+                  ) : canResend ? (
+                    <TouchableOpacity
+                      onPress={handleResendOTP}
+                      activeOpacity={0.7}
+                      disabled={isSendingOtp || isVerifyingOtp}
+                      accessibilityLabel="Resend OTP"
+                      accessibilityHint="Send a new verification code"
+                    >
+                      <Text style={styles.resendLink}>{isSendingOtp ? 'Sending...' : 'Resend OTP'}</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <Text style={styles.resendTimer}>Resend in {resendTimer}s</Text>
+                  )}
+                </View>
+              </>
+            )}
 
             <TouchableOpacity
               style={styles.backButton}
@@ -383,9 +424,21 @@ const styles = StyleSheet.create({
   },
   webRecaptchaContainer: {
     minHeight: 78,
-    marginBottom: 20,
+    marginBottom: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  helperText: {
+    marginBottom: 20,
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  errorText: {
+    marginBottom: 20,
+    fontSize: 14,
+    color: '#d32f2f',
+    textAlign: 'center',
   },
   inputContainer: {
     marginBottom: 24,
