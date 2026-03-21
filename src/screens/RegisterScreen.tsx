@@ -1,5 +1,4 @@
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
@@ -17,27 +16,26 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SocialAuthButtons from '../components/SocialAuthButtons';
-import firebaseConfig, { prepareWebRecaptchaVerifier } from '../services/firebaseConfig';
+import { prepareWebRecaptchaVerifier } from '../services/firebaseConfig';
 import useAuth from '../hooks/useAuth';
 import { isValidE164PhoneNumber, normalizePhoneNumber } from '../utils/phoneAuth';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface RegisterScreenProps {}
 
+const WEB_RECAPTCHA_CONTAINER_ID = 'register-recaptcha-container';
+
 const RegisterScreen: React.FC<RegisterScreenProps> = () => {
   const [countryCode, setCountryCode] = useState<string>('+91');
   const [phoneNumber, setPhoneNumber] = useState<string>('');
   const [agreeToTerms, setAgreeToTerms] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [isRecaptchaReady, setIsRecaptchaReady] = useState<boolean>(Platform.OS === 'web');
   const [isWebRecaptchaLoading, setIsWebRecaptchaLoading] = useState<boolean>(Platform.OS === 'web');
   const [webRecaptchaError, setWebRecaptchaError] = useState<string | null>(null);
 
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { loading, sendPhoneOTP, signInWithOAuth } = useAuth();
-  const recaptchaVerifier = React.useRef<FirebaseRecaptchaVerifierModal | null>(null);
-
   useEffect(() => {
     if (route.params?.agreedTerms || route.params?.agreedPrivacy) {
       setAgreeToTerms(true);
@@ -55,7 +53,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
       setWebRecaptchaError(null);
 
       try {
-        await prepareWebRecaptchaVerifier();
+        await prepareWebRecaptchaVerifier(WEB_RECAPTCHA_CONTAINER_ID);
       } catch (error) {
         setWebRecaptchaError((error as Error).message || 'Failed to load verification.');
       } finally {
@@ -92,7 +90,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
       setIsSubmitting(true);
       const { verificationId } = await sendPhoneOTP(
         normalizedPhoneNumber,
-        Platform.OS !== 'web' ? recaptchaVerifier.current : undefined,
       );
 
       navigation.navigate('PhoneOTP', {
@@ -249,7 +246,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
                 loading ||
                 isWebRecaptchaLoading ||
                 !!webRecaptchaError ||
-                (Platform.OS !== 'web' && !isRecaptchaReady)
+                !agreeToTerms
               }
               {...(Platform.OS === 'web' ? { type: 'button' } : {})}
               accessibilityLabel="Sign up button"
@@ -262,7 +259,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
 
             {Platform.OS === 'web' && (
               <>
-                <View nativeID="recaptcha-container" style={styles.webRecaptchaContainer} {...({ id: 'recaptcha-container' } as any)} />
+                <View
+                  nativeID={WEB_RECAPTCHA_CONTAINER_ID}
+                  style={styles.webRecaptchaContainer}
+                  {...({ id: WEB_RECAPTCHA_CONTAINER_ID } as any)}
+                />
                 {webRecaptchaError && <Text style={styles.errorText}>{webRecaptchaError}</Text>}
               </>
             )}
@@ -286,17 +287,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {Platform.OS !== 'web' && (
-        <FirebaseRecaptchaVerifierModal
-          ref={(instance) => {
-            recaptchaVerifier.current = instance;
-            setIsRecaptchaReady(!!instance);
-          }}
-          firebaseConfig={firebaseConfig}
-          attemptInvisibleVerification
-        />
-      )}
     </SafeAreaView>
   );
 };

@@ -23,8 +23,9 @@ const firebaseConfig = {
 let firebaseAppInstance: FirebaseApp | null = null;
 let webRecaptchaVerifier: RecaptchaVerifier | null = null;
 let webConfirmationResult: ConfirmationResult | null = null;
-let nativeConfirmationResult: ConfirmationResult | null = null;
+let nativeConfirmationResult: any = null;
 const WEB_RECAPTCHA_CONTAINER_ID = 'recaptcha-container';
+let activeWebRecaptchaContainerId = WEB_RECAPTCHA_CONTAINER_ID;
 const FIREBASE_PHONE_AUTH_ERROR_FALLBACK = 'Firebase rejected the phone verification request';
 
 function getWebLocationContext() {
@@ -95,12 +96,16 @@ export function initFirebase(): { initialized: boolean; config: typeof firebaseC
   }
 }
 
-function getWebRecaptchaContainer(): HTMLElement {
+export function getFirebaseAuth() {
+  return getAuth(getFirebaseApp());
+}
+
+function getWebRecaptchaContainer(containerId: string = activeWebRecaptchaContainerId): HTMLElement {
   if (typeof document === 'undefined') {
     throw new Error('reCAPTCHA container is only available on web');
   }
 
-  const container = document.getElementById(WEB_RECAPTCHA_CONTAINER_ID);
+  const container = document.getElementById(containerId);
   if (!container) {
     throw new Error('reCAPTCHA container is missing. Open the OTP screen before sending the verification code.');
   }
@@ -108,13 +113,15 @@ function getWebRecaptchaContainer(): HTMLElement {
   return container;
 }
 
-async function getWebRecaptchaVerifier() {
-  const auth = getAuth(getFirebaseApp());
+async function getWebRecaptchaVerifier(containerId: string = activeWebRecaptchaContainerId) {
+  const auth = getFirebaseAuth();
   auth.languageCode = 'en';
+  const previousContainerId = activeWebRecaptchaContainerId;
+  activeWebRecaptchaContainerId = containerId;
 
   if (webRecaptchaVerifier) {
-    const existingContainer = document.getElementById(WEB_RECAPTCHA_CONTAINER_ID);
-    if (!existingContainer || !existingContainer.isConnected) {
+    const existingContainer = document.getElementById(previousContainerId);
+    if (previousContainerId !== containerId || !existingContainer || !existingContainer.isConnected) {
       clearWebRecaptchaVerifier();
     }
   }
@@ -132,7 +139,7 @@ async function getWebRecaptchaVerifier() {
     webRecaptchaVerifier = null;
   }
 
-  const container = getWebRecaptchaContainer();
+  const container = getWebRecaptchaContainer(containerId);
   container.innerHTML = '';
   if (typeof window !== 'undefined') {
     (window as any).__webRecaptchaSolved = false;
@@ -164,12 +171,12 @@ async function getWebRecaptchaVerifier() {
   return webRecaptchaVerifier;
 }
 
-export async function prepareWebRecaptchaVerifier(): Promise<void> {
+export async function prepareWebRecaptchaVerifier(containerId: string = WEB_RECAPTCHA_CONTAINER_ID): Promise<void> {
   if (typeof window === 'undefined') {
     return;
   }
 
-  await getWebRecaptchaVerifier();
+  await getWebRecaptchaVerifier(containerId);
 }
 
 function clearWebRecaptchaVerifier() {
@@ -279,7 +286,7 @@ export const firebasePhoneAuth = {
     try {
       const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
       const locationContext = getWebLocationContext();
-      const auth = getAuth(getFirebaseApp());
+      const auth = getFirebaseAuth();
       auth.languageCode = 'en';
 
       if (!isValidE164PhoneNumber(normalizedPhoneNumber)) {
@@ -289,12 +296,9 @@ export const firebasePhoneAuth = {
       let recaptchaVerifier: any;
 
       if (Platform.OS !== 'web') {
-        if (!verifier) {
-          throw new Error(
-            'Phone authentication requires the Expo reCAPTCHA verifier on native platforms. Please wait for the verification modal to finish loading and try again.'
-          );
-        }
-        recaptchaVerifier = verifier;
+        throw new Error(
+          'Phone OTP is not available in Expo Go because it requires native Firebase auth modules. Use the web build for OTP, or create an Expo development build if you want native phone authentication.'
+        );
       } else if (typeof window !== 'undefined') {
         if (
           locationContext &&
@@ -400,7 +404,7 @@ export const firebasePhoneAuth = {
         return result;
       }
 
-      const auth = getAuth(getFirebaseApp());
+      const auth = getFirebaseAuth();
       const credential = PhoneAuthProvider.credential(verificationId, sanitizedOtpCode);
       const result = await signInWithCredential(auth, credential);
       if (typeof window !== 'undefined') {

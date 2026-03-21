@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "aivehicle",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "platforms": [
       "ios",
       "android",
@@ -62,3 +61,4 @@
     }
   }
 }
+

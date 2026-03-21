@@ -1,17 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getAdditionalUserInfo,
-  getAuth,
   GoogleAuthProvider,
   OAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
-  signOut as firebaseSignOut,
   updateProfile,
 } from 'firebase/auth';
 import { Platform } from 'react-native';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import { firebasePhoneAuth, getFirebaseApp } from '../services/firebaseConfig';
+import { firebasePhoneAuth, getFirebaseAuth } from '../services/firebaseConfig';
 
 function mapFirebaseUser(fu: any): User {
   const name = fu.displayName || '';
@@ -73,7 +71,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const restore = async () => {
       try {
-        const auth = getAuth(getFirebaseApp());
+        const auth = getFirebaseAuth();
         const firebaseUser = auth.currentUser;
         if (firebaseUser) {
           const mapped = mapFirebaseUser(firebaseUser);
@@ -94,17 +92,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     restore();
 
-    const auth = getAuth(getFirebaseApp());
-    const unsubscribe = onAuthStateChanged(auth, async (fu: any) => {
-      if (fu) {
-        const mapped = mapFirebaseUser(fu);
-        setUser(mapped);
-        await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
-      } else {
-        setUser(null);
-        await AsyncStorage.removeItem('currentUser');
-      }
-    });
+    const unsubscribe =
+      onAuthStateChanged(getFirebaseAuth(), async (fu: any) => {
+            if (fu) {
+              const mapped = mapFirebaseUser(fu);
+              setUser(mapped);
+              await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
+            } else {
+              setUser(null);
+              await AsyncStorage.removeItem('currentUser');
+            }
+          });
 
     return () => unsubscribe();
   }, []);
@@ -112,8 +110,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOut = async () => {
     setLoading(true);
     try {
-      const auth = getAuth(getFirebaseApp());
-      await firebaseSignOut(auth);
+      const auth = getFirebaseAuth();
+      await auth.signOut();
       await AsyncStorage.removeItem('currentUser');
       setUser(null);
     } catch (err) {
@@ -125,15 +123,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateUser = async (userData: Partial<User>) => {
-    const auth = getAuth(getFirebaseApp());
+    const trimmedName = userData.name?.trim();
+    const auth = getFirebaseAuth();
     const firebaseUser = auth.currentUser;
 
     if (!firebaseUser) {
       throw new Error('No user logged in');
     }
 
-    if (userData.name) {
-      await updateProfile(firebaseUser, { displayName: userData.name.trim() });
+    if (trimmedName) {
+      await updateProfile(firebaseUser, { displayName: trimmedName });
     }
 
     await firebaseUser.reload();
@@ -188,7 +187,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error('Google and Apple sign-in are currently available on web only in this app.');
       }
 
-      const auth = getAuth(getFirebaseApp());
+      const auth = getFirebaseAuth();
       let provider: GoogleAuthProvider | OAuthProvider;
 
       switch (providerName) {
@@ -261,7 +260,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(mapped);
 
       return {
-        isNewUser: !!result?.additionalUserInfo?.isNewUser,
+        isNewUser:
+          Platform.OS === 'web'
+            ? !!(result?.additionalUserInfo?.isNewUser ?? getAdditionalUserInfo(result as any)?.isNewUser)
+            : !!result?.additionalUserInfo?.isNewUser,
         user: mapped,
       };
     } catch (err) {
