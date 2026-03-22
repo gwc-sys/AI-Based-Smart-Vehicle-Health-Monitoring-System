@@ -30,6 +30,7 @@ type WebTouchableProps = {
 };
 
 const WEB_RECAPTCHA_CONTAINER_ID = 'login-recaptcha-container';
+const OAUTH_PROVIDERS = Platform.OS === 'web' ? (['google', 'apple'] as const) : (['google'] as const);
 
 const LoginScreen: React.FC<LoginScreenProps> = () => {
   const [countryCode, setCountryCode] = useState<string>('+91');
@@ -205,7 +206,7 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
               </>
             )}
 
-            <SocialAuthButtons onPress={handleOAuthLogin} loading={loading} mode="login" />
+            <SocialAuthButtons onPress={handleOAuthLogin} loading={loading} mode="login" providers={[...OAUTH_PROVIDERS]} />
           </View>
 
           <View style={styles.footerContainer}>

@@ -1,4 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getApp as getNativeApp } from '@react-native-firebase/app';
+import {
+  getAuth as getNativeAuth,
+  GoogleAuthProvider as NativeGoogleAuthProvider,
+  onAuthStateChanged as onNativeAuthStateChanged,
+  reload as reloadNativeUser,
+  signInWithCredential as signInWithNativeCredential,
+  signOut as signOutNativeAuth,
+  updateProfile as updateNativeProfile,
+} from '@react-native-firebase/auth';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import {
   getAdditionalUserInfo,
   GoogleAuthProvider,
@@ -9,6 +20,7 @@ import {
 } from 'firebase/auth';
 import { Platform } from 'react-native';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import { Env } from '../config/env';
 import { firebasePhoneAuth, getFirebaseAuth } from '../services/firebaseConfig';
 
 function mapFirebaseUser(fu: any): User {
@@ -45,6 +57,18 @@ type OAuthSignInResult = {
   user: User;
 };
 
+const GOOGLE_WEB_CLIENT_ID_FALLBACK = '414445888340-of5iqmnuja7upemvo039to71tug6ormf.apps.googleusercontent.com';
+
+function getPlatformAuth() {
+  return Platform.OS === 'web' ? getFirebaseAuth() : getNativeAuth(getNativeApp());
+}
+
+function configureNativeGoogleSignIn() {
+  GoogleSignin.configure({
+    webClientId: Env.GOOGLE_WEB_CLIENT_ID ?? GOOGLE_WEB_CLIENT_ID_FALLBACK,
+  });
+}
+
 type AuthContextType = {
   user: User | null;
   initializing: boolean;
@@ -71,7 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const restore = async () => {
       try {
-        const auth = getFirebaseAuth();
+        const auth = getPlatformAuth();
         const firebaseUser = auth.currentUser;
         if (firebaseUser) {
           const mapped = mapFirebaseUser(firebaseUser);
@@ -93,7 +117,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     restore();
 
     const unsubscribe =
-      onAuthStateChanged(getFirebaseAuth(), async (fu: any) => {
+      Platform.OS === 'web'
+        ? onAuthStateChanged(getFirebaseAuth(), async (fu: any) => {
+            if (fu) {
+              const mapped = mapFirebaseUser(fu);
+              setUser(mapped);
+              await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
+            } else {
+              setUser(null);
+              await AsyncStorage.removeItem('currentUser');
+            }
+          })
+        : onNativeAuthStateChanged(getNativeAuth(getNativeApp()), async (fu: any) => {
             if (fu) {
               const mapped = mapFirebaseUser(fu);
               setUser(mapped);
@@ -110,8 +145,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOut = async () => {
     setLoading(true);
     try {
-      const auth = getFirebaseAuth();
-      await auth.signOut();
+      const auth = getPlatformAuth();
+      if (Platform.OS !== 'web') {
+        await GoogleSignin.signOut().catch(() => undefined);
+        await signOutNativeAuth(auth as any);
+      } else {
+        await auth.signOut();
+      }
       await AsyncStorage.removeItem('currentUser');
       setUser(null);
     } catch (err) {
@@ -124,7 +164,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const updateUser = async (userData: Partial<User>) => {
     const trimmedName = userData.name?.trim();
-    const auth = getFirebaseAuth();
+    const auth = getPlatformAuth();
     const firebaseUser = auth.currentUser;
 
     if (!firebaseUser) {
@@ -132,10 +172,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (trimmedName) {
-      await updateProfile(firebaseUser, { displayName: trimmedName });
+      if (Platform.OS === 'web') {
+        await updateProfile(firebaseUser as any, { displayName: trimmedName });
+      } else {
+        await updateNativeProfile(firebaseUser as any, { displayName: trimmedName });
+      }
     }
 
-    await firebaseUser.reload();
+    if (Platform.OS === 'web') {
+      await firebaseUser.reload();
+    } else {
+      await reloadNativeUser(firebaseUser as any);
+    }
 
     const refreshedUser = auth.currentUser;
     if (!refreshedUser) {
@@ -184,7 +232,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       if (Platform.OS !== 'web') {
-        throw new Error('Google and Apple sign-in are currently available on web only in this app.');
+        if (providerName === 'apple') {
+          throw new Error('Apple sign-in is not configured for Android in this app yet.');
+        }
+
+        configureNativeGoogleSignIn();
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+        await GoogleSignin.signIn();
+        const { idToken } = await GoogleSignin.getTokens();
+
+        if (!idToken) {
+          throw new Error('Google sign-in did not return an ID token. Check the Google OAuth client configuration.');
+        }
+
+        const credential = NativeGoogleAuthProvider.credential(idToken);
+        const result = await signInWithNativeCredential(getNativeAuth(getNativeApp()), credential);
+        const firebaseUser = result.user;
+
+        if (!firebaseUser) {
+          throw new Error('Google sign-in succeeded but no Firebase user was returned');
+        }
+
+        const mapped = mapFirebaseUser(firebaseUser);
+        await AsyncStorage.setItem('currentUser', JSON.stringify(mapped));
+        setUser(mapped);
+
+        return {
+          isNewUser: !!result.additionalUserInfo?.isNewUser,
+          user: mapped,
+        };
       }
 
       const auth = getFirebaseAuth();
@@ -220,9 +296,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         user: mapped,
       };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'OAuth sign-in failed';
+      let msg = err instanceof Error ? err.message : 'OAuth sign-in failed';
+      const normalizedMessage = msg.toLowerCase();
+
+      if (normalizedMessage.includes('popup') && normalizedMessage.includes('blocked')) {
+        msg = 'Browser popup was blocked. Allow popups for this site and try again.';
+      } else if (normalizedMessage.includes('play services')) {
+        msg = 'Google Play Services is unavailable or outdated on this Android device.';
+      } else if (
+        normalizedMessage.includes('12500') ||
+        normalizedMessage.includes('10') ||
+        normalizedMessage.includes('developer error')
+      ) {
+        msg =
+          'Google sign-in is not fully configured for this Android app yet. Add this app SHA-1 and SHA-256 in Firebase, then download a fresh google-services.json.';
+      } else if (
+        normalizedMessage.includes('auth/operation-not-allowed') ||
+        normalizedMessage.includes('sign-in provider is disabled')
+      ) {
+        msg = 'This sign-in provider is disabled in Firebase Console. Enable it under Authentication > Sign-in method.';
+      }
+
       setError(msg);
-      throw err;
+      throw new Error(msg);
     } finally {
       setLoading(false);
     }

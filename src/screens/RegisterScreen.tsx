@@ -24,6 +24,7 @@ import { isValidE164PhoneNumber, normalizePhoneNumber } from '../utils/phoneAuth
 interface RegisterScreenProps {}
 
 const WEB_RECAPTCHA_CONTAINER_ID = 'register-recaptcha-container';
+const OAUTH_PROVIDERS = Platform.OS === 'web' ? (['google', 'apple'] as const) : (['google'] as const);
 
 const RegisterScreen: React.FC<RegisterScreenProps> = () => {
   const [countryCode, setCountryCode] = useState<string>('+91');
@@ -36,6 +37,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { loading, sendPhoneOTP, signInWithOAuth } = useAuth();
+
   useEffect(() => {
     if (route.params?.agreedTerms || route.params?.agreedPrivacy) {
       setAgreeToTerms(true);
@@ -160,6 +162,8 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
     }
   }, []);
 
+  const isRegisterDisabled = isSubmitting || loading || isWebRecaptchaLoading || !!webRecaptchaError || !agreeToTerms;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
@@ -241,13 +245,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
               style={[styles.registerButton, Platform.OS === 'web' && ({ className: 'register-button' } as any)]}
               onPress={handleRegister}
               activeOpacity={0.8}
-              disabled={
-                isSubmitting ||
-                loading ||
-                isWebRecaptchaLoading ||
-                !!webRecaptchaError ||
-                !agreeToTerms
-              }
+              disabled={isRegisterDisabled}
               {...(Platform.OS === 'web' ? { type: 'button' } : {})}
               accessibilityLabel="Sign up button"
               accessibilityHint="Tap to create your account"
@@ -268,7 +266,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = () => {
               </>
             )}
 
-            <SocialAuthButtons onPress={handleOAuthRegister} loading={loading} mode="register" />
+            <SocialAuthButtons onPress={handleOAuthRegister} loading={loading} mode="register" providers={[...OAUTH_PROVIDERS]} />
           </View>
 
           <View style={styles.loginContainer}>

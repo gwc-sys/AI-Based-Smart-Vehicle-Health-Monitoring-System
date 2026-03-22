@@ -31,7 +31,6 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const [canResend, setCanResend] = useState<boolean>(false);
   const [isSendingOtp, setIsSendingOtp] = useState<boolean>(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
-  const [isWebRecaptchaLoading, setIsWebRecaptchaLoading] = useState<boolean>(Platform.OS === 'web');
   const [webRecaptchaError, setWebRecaptchaError] = useState<string | null>(null);
   const [otpSendCount, setOtpSendCount] = useState<number>(0);
   const [isOtpLimitReached, setIsOtpLimitReached] = useState<boolean>(false);
@@ -39,13 +38,16 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { sendPhoneOTP, signOut, verifyPhoneOTP } = useAuth();
-
-  const usesNativeRecaptcha = Platform.OS !== 'web';
-
   const phoneNumber = normalizePhoneNumber(route.params?.phoneNumber ?? '');
   const verificationId = route.params?.verificationId;
   const authMode: 'signIn' | 'signUp' = route.params?.authMode === 'signUp' ? 'signUp' : 'signIn';
   const isOtpSent = !!verificationId;
+
+  useEffect(() => {
+    if (verificationId) {
+      setOtpSendCount((count) => (count === 0 ? 1 : count));
+    }
+  }, [verificationId]);
 
   useEffect(() => {
     const initializeWebRecaptcha = async () => {
@@ -53,15 +55,12 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
         return;
       }
 
-      setIsWebRecaptchaLoading(true);
       setWebRecaptchaError(null);
 
       try {
         await prepareWebRecaptchaVerifier(WEB_RECAPTCHA_CONTAINER_ID);
       } catch (error) {
         setWebRecaptchaError((error as Error).message || 'Failed to load reCAPTCHA.');
-      } finally {
-        setIsWebRecaptchaLoading(false);
       }
     };
 
@@ -129,7 +128,6 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
     navigateBackSafely,
     phoneNumber,
     sendPhoneOTP,
-    usesNativeRecaptcha,
     verificationId,
   ]);
 

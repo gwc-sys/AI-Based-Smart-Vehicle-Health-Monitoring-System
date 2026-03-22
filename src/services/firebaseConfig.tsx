@@ -1,4 +1,6 @@
 import { Platform } from 'react-native';
+import { getApp as getNativeApp } from '@react-native-firebase/app';
+import { getAuth as getNativeAuth, signInWithPhoneNumber as signInWithNativePhoneNumber } from '@react-native-firebase/auth';
 import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
 import {
   ConfirmationResult,
@@ -29,7 +31,13 @@ let activeWebRecaptchaContainerId = WEB_RECAPTCHA_CONTAINER_ID;
 const FIREBASE_PHONE_AUTH_ERROR_FALLBACK = 'Firebase rejected the phone verification request';
 
 function getWebLocationContext() {
-  if (typeof window === 'undefined') {
+  if (
+    typeof window === 'undefined' ||
+    !window.location ||
+    typeof window.location.hostname !== 'string' ||
+    typeof window.location.origin !== 'string' ||
+    typeof window.location.protocol !== 'string'
+  ) {
     return null;
   }
 
@@ -296,9 +304,12 @@ export const firebasePhoneAuth = {
       let recaptchaVerifier: any;
 
       if (Platform.OS !== 'web') {
-        throw new Error(
-          'Phone OTP is not available in Expo Go because it requires native Firebase auth modules. Use the web build for OTP, or create an Expo development build if you want native phone authentication.'
-        );
+        const nativeAuth = getNativeAuth(getNativeApp());
+        const confirmationResult = await signInWithNativePhoneNumber(nativeAuth, normalizedPhoneNumber);
+        nativeConfirmationResult = confirmationResult;
+        return {
+          verificationId: confirmationResult.verificationId ?? normalizedPhoneNumber,
+        };
       } else if (typeof window !== 'undefined') {
         if (
           locationContext &&
@@ -371,10 +382,18 @@ export const firebasePhoneAuth = {
             : '';
         hint = ` The request is being intercepted before Firebase can return its normal JSON error. Check that "${host}" is listed in Firebase Console > Authentication > Settings > Authorized domains, disable ad-block/privacy blocking for Google reCAPTCHA, and retry.${browserHint}`;
       } else if (rawMessage.toLowerCase().includes('network error')) {
-        const host = typeof window !== 'undefined' ? window.location.hostname : 'this host';
+        const host = getWebLocationContext()?.host ?? 'this host';
         hint = ` Verify that "${host}" is added in Firebase Console > Authentication > Settings > Authorized domains, then retry without tracker-blocking extensions for the reCAPTCHA step.`;
       } else if (rawMessage.toLowerCase().includes('billing') || normalizedMessage.includes('BILLING')) {
         hint = ' Verify your Firebase project billing/quota settings for phone authentication.';
+      } else if (
+        code === 'auth/app-not-authorized' ||
+        normalizedMessage.includes('APP_NOT_AUTHORIZED') ||
+        normalizedMessage.includes('PLAY_INTEGRITY_TOKEN') ||
+        normalizedMessage.includes('INVALID APP INFO')
+      ) {
+        hint =
+          ' Android app verification failed. In Firebase Console > Project settings > Your apps > Android app "com.aivehicle.smarthealth", add the SHA-1 and SHA-256 for the keystore used to build this app, then download a fresh google-services.json and rebuild the Android app.';
       }
 
       throw new Error(`Failed to send OTP${code ? ` (${code})` : ''}: ${rawMessage}.${hint}`);
@@ -402,6 +421,10 @@ export const firebasePhoneAuth = {
         const result = await nativeConfirmationResult.confirm(sanitizedOtpCode);
         clearNativePhoneVerification();
         return result;
+      }
+
+      if (Platform.OS !== 'web') {
+        throw new Error('OTP session expired. Please request a new verification code.');
       }
 
       const auth = getFirebaseAuth();

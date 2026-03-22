@@ -8,11 +8,12 @@
     "prebuild:android": "expo prebuild --platform android",
     "prebuild:ios": "expo prebuild --platform ios",
     "build": "expo export --platform web",
-    "android": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:GRADLE_OPTS='-Dorg.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=512m -XX:CICompilerCount=1 -XX:TieredStopAtLevel=1 -Dkotlin.daemon.jvm.options=-Xmx256m'; $env:_JAVA_OPTIONS='-Xmx256m -XX:MaxMetaspaceSize=128m'; expo run:android --no-build-cache\"",
+    "android": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:JAVA_HOME='C:\\Program Files\\Android\\Android Studio\\jbr'; $env:Path='C:\\Program Files\\Android\\Android Studio\\jbr\\bin;' + $env:Path; Remove-Item Env:_JAVA_OPTIONS -ErrorAction SilentlyContinue; Remove-Item Env:JAVA_OPTS -ErrorAction SilentlyContinue; Remove-Item Env:GRADLE_OPTS -ErrorAction SilentlyContinue; expo run:android --no-build-cache\"",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "android:all": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:GRADLE_OPTS='-Dorg.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=512m -XX:CICompilerCount=1 -XX:TieredStopAtLevel=1 -Dkotlin.daemon.jvm.options=-Xmx256m'; $env:_JAVA_OPTIONS='-Xmx256m -XX:MaxMetaspaceSize=128m'; expo run:android --all-arch --no-build-cache\"",
+    "firebase:doctor": "node scripts/firebase-doctor.js",
+    "android:all": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:JAVA_HOME='C:\\Program Files\\Android\\Android Studio\\jbr'; $env:Path='C:\\Program Files\\Android\\Android Studio\\jbr\\bin;' + $env:Path; Remove-Item Env:_JAVA_OPTIONS -ErrorAction SilentlyContinue; Remove-Item Env:JAVA_OPTS -ErrorAction SilentlyContinue; Remove-Item Env:GRADLE_OPTS -ErrorAction SilentlyContinue; expo run:android --all-arch --no-build-cache\"",
     "postinstall": "node scripts/patch-expo-android-abi.js"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-firebase/app": "^23.8.8",
     "@react-native-firebase/auth": "^23.8.8",
+    "@react-native-google-signin/google-signin": "^16.1.2",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
