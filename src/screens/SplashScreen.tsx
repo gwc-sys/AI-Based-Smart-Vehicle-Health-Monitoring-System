@@ -1,64 +1,74 @@
-import React, { useEffect } from 'react';
-import { Dimensions, Image, StyleSheet, Text, View } from 'react-native';
-import Animated, {
-    cancelAnimation,
-    Easing,
-    useAnimatedStyle,
-    useSharedValue,
-    withRepeat,
-    withSequence,
-    withTiming,
-} from 'react-native-reanimated';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Dimensions, Easing, Image, StyleSheet, Text, View } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
 const SplashScreen: React.FC = () => {
-  const opacity = useSharedValue(0);
-  const scale = useSharedValue(0.9);
-  const loaderProgress = useSharedValue(0);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.9)).current;
+  const loaderProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Fade In
-    opacity.value = withTiming(1, { duration: 1000 });
+    const fadeIn = Animated.timing(opacity, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+    });
 
-    // Pulse Animation
-    scale.value = withRepeat(
-      withSequence(
-        withTiming(1.05, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0.95, { duration: 1500, easing: Easing.inOut(Easing.ease) })
-      ),
-      -1,
-      true
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, {
+          toValue: 1.05,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scale, {
+          toValue: 0.95,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
     );
 
-    // Loader animation (0 → 1)
-    loaderProgress.value = withTiming(
-      1,
-      { duration: 3000, easing: Easing.linear }
-    );
+    const loader = Animated.timing(loaderProgress, {
+      toValue: 1,
+      duration: 3000,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+
+    fadeIn.start();
+    pulse.start();
+    loader.start();
 
     return () => {
-      cancelAnimation(scale);
-      cancelAnimation(loaderProgress);
+      pulse.stop();
+      fadeIn.stop();
+      loader.stop();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loaderProgress, opacity, scale]);
 
-  const animatedCarStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ scale: scale.value }],
-  }));
-
-  const animatedLoaderStyle = useAnimatedStyle(() => ({
-    width: loaderProgress.value * (width * 0.6), // ✅ numeric width
-  }));
+  const loaderWidth = loaderProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, width * 0.6],
+  });
 
   return (
     <View style={styles.container}>
       <View style={[styles.glowOrb, styles.glowOrb1]} />
       <View style={[styles.glowOrb, styles.glowOrb2]} />
 
-      <Animated.View style={[styles.content, animatedCarStyle]}>
+      <Animated.View
+        style={[
+          styles.content,
+          {
+            opacity,
+            transform: [{ scale }],
+          },
+        ]}
+      >
         <Image
           source={require('../../assets/images/VHMS1.png')}
           style={styles.logo}
@@ -72,17 +82,16 @@ const SplashScreen: React.FC = () => {
         <Text style={styles.subtitle}>INITIALIZING DIAGNOSTICS...</Text>
 
         <View style={styles.statusContainer}>
-          <Text style={styles.statusText}>AI network ▰▰▰▰▰▰▰▰▰▰ 98%</Text>
-          <Text style={styles.statusText}>Sensor fusion ▰▰▰▰▰▰▰▰▰▰ 87%</Text>
+          <Text style={styles.statusText}>AI network loading 98%</Text>
+          <Text style={styles.statusText}>Sensor fusion loading 87%</Text>
         </View>
       </Animated.View>
 
-      {/* Loader */}
       <View style={styles.loaderContainer}>
-        <Animated.View style={[styles.loaderBar, animatedLoaderStyle]} />
+        <Animated.View style={[styles.loaderBar, { width: loaderWidth }]} />
       </View>
 
-      <Text style={styles.version}>v2.1.6 · QUANTUM CORE</Text>
+      <Text style={styles.version}>v2.1.6 | QUANTUM CORE</Text>
     </View>
   );
 };

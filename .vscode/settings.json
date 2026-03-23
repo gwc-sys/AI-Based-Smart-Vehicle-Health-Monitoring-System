@@ -1,8 +1,20 @@
 {
-  "editor.codeActionsOnSave": {
-    "source.fixAll": "explicit",
-    "source.organizeImports": "explicit",
-    "source.sortMembers": "explicit"
-  },
-  "java.configuration.updateBuildConfiguration": "interactive"
+    "editor.codeActionsOnSave":  {
+                                     "source.fixAll":  "explicit",
+                                     "source.organizeImports":  "explicit",
+                                     "source.sortMembers":  "explicit"
+                                 },
+    "java.configuration.updateBuildConfiguration":  "disabled",
+    "java.import.gradle.enabled":  false,
+    "java.compile.nullAnalysis.mode":  "automatic",
+    "java.import.gradle.java.home":  "C:\\Program Files\\Android\\Android Studio\\jbr",
+    "java.jdt.ls.java.home":  "C:\\Program Files\\Android\\Android Studio\\jbr",
+    "java.configuration.runtimes":  [
+                                        {
+                                            "path":  "C:\\Program Files\\Android\\Android Studio\\jbr",
+                                            "default":  true,
+                                            "name":  "JavaSE-21"
+                                        }
+                                    ],
+    "java.autobuild.enabled":  false
 }

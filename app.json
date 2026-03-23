@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "aivehicle",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "platforms": [
       "ios",
       "android",
@@ -52,6 +51,7 @@
       "reactCompiler": true
     },
     "extra": {
+      "googleWebClientId": "414445888340-of5iqmnuja7upemvo039to71tug6ormf.apps.googleusercontent.com",
       "firebaseApiKey": "AIzaSyDowbCOXreWmH7FS_4mKgVWkMVJUiiCTXQ",
       "firebaseProjectId": "ai-based-smart-vehicle-h-b714b",
       "firebaseAuthDomain": "ai-based-smart-vehicle-h-b714b.firebaseapp.com",
@@ -62,3 +62,4 @@
     }
   }
 }
+

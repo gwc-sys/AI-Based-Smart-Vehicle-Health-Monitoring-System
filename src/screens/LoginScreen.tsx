@@ -1,5 +1,4 @@
 import { useNavigation } from '@react-navigation/native';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import React, { useState } from 'react';
 import {
   Alert,
@@ -17,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SocialAuthButtons from '../components/SocialAuthButtons';
-import firebaseConfig, { prepareWebRecaptchaVerifier } from '../services/firebaseConfig';
+import { prepareWebRecaptchaVerifier } from '../services/firebaseConfig';
 import useAuth from '../hooks/useAuth';
 import { isValidE164PhoneNumber, normalizePhoneNumber } from '../utils/phoneAuth';
 
@@ -30,17 +29,17 @@ type WebTouchableProps = {
   type?: 'button' | 'submit' | 'reset';
 };
 
+const WEB_RECAPTCHA_CONTAINER_ID = 'login-recaptcha-container';
+const OAUTH_PROVIDERS = Platform.OS === 'web' ? (['google', 'apple'] as const) : (['google'] as const);
+
 const LoginScreen: React.FC<LoginScreenProps> = () => {
   const [countryCode, setCountryCode] = useState<string>('+91');
   const [phoneNumber, setPhoneNumber] = useState<string>('');
-  const [isRecaptchaReady, setIsRecaptchaReady] = useState<boolean>(Platform.OS === 'web');
   const [isWebRecaptchaLoading, setIsWebRecaptchaLoading] = useState<boolean>(Platform.OS === 'web');
   const [webRecaptchaError, setWebRecaptchaError] = useState<string | null>(null);
 
   const navigation = useNavigation<any>();
   const { loading, sendPhoneOTP, signInWithOAuth } = useAuth();
-  const recaptchaVerifier = React.useRef<FirebaseRecaptchaVerifierModal | null>(null);
-
   const handleSignUp = (): void => {
     navigation.navigate('Register');
   };
@@ -65,7 +64,6 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
     try {
       const { verificationId } = await sendPhoneOTP(
         normalizedPhoneNumber,
-        Platform.OS !== 'web' ? recaptchaVerifier.current : undefined,
       );
 
       navigation.navigate('PhoneOTP', {
@@ -123,7 +121,7 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
       setWebRecaptchaError(null);
 
       try {
-        await prepareWebRecaptchaVerifier();
+        await prepareWebRecaptchaVerifier(WEB_RECAPTCHA_CONTAINER_ID);
       } catch (error) {
         setWebRecaptchaError((error as Error).message || 'Failed to load verification.');
       } finally {
@@ -189,7 +187,7 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
               style={[styles.loginButton, Platform.OS === 'web' && ({ className: 'login-button' } as any)]}
               onPress={handlePhoneLogin}
               activeOpacity={0.8}
-              disabled={loading || isWebRecaptchaLoading || !!webRecaptchaError || (Platform.OS !== 'web' && !isRecaptchaReady)}
+              disabled={loading || isWebRecaptchaLoading || !!webRecaptchaError}
               {...(Platform.OS === 'web' ? { type: 'button' } : {})}
               accessibilityLabel="Send OTP button"
               accessibilityHint="Tap to receive verification code"
@@ -199,12 +197,16 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
 
             {Platform.OS === 'web' && (
               <>
-                <View nativeID="recaptcha-container" style={styles.webRecaptchaContainer} {...({ id: 'recaptcha-container' } as any)} />
+                <View
+                  nativeID={WEB_RECAPTCHA_CONTAINER_ID}
+                  style={styles.webRecaptchaContainer}
+                  {...({ id: WEB_RECAPTCHA_CONTAINER_ID } as any)}
+                />
                 {webRecaptchaError && <Text style={styles.errorText}>{webRecaptchaError}</Text>}
               </>
             )}
 
-            <SocialAuthButtons onPress={handleOAuthLogin} loading={loading} mode="login" />
+            <SocialAuthButtons onPress={handleOAuthLogin} loading={loading} mode="login" providers={[...OAUTH_PROVIDERS]} />
           </View>
 
           <View style={styles.footerContainer}>
@@ -225,17 +227,6 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {Platform.OS !== 'web' && (
-        <FirebaseRecaptchaVerifierModal
-          ref={(instance) => {
-            recaptchaVerifier.current = instance;
-            setIsRecaptchaReady(!!instance);
-          }}
-          firebaseConfig={firebaseConfig}
-          attemptInvisibleVerification
-        />
-      )}
     </SafeAreaView>
   );
 };

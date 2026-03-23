@@ -1,6 +1,5 @@
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -15,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import useAuth from '../hooks/useAuth';
-import firebaseConfig, { prepareWebRecaptchaVerifier } from '../services/firebaseConfig';
+import { prepareWebRecaptchaVerifier } from '../services/firebaseConfig';
 import { isValidE164PhoneNumber, normalizePhoneNumber, sanitizeOtpCode } from '../utils/phoneAuth';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -24,6 +23,7 @@ interface PhoneOTPScreenProps {}
 const RESEND_WAIT_SECONDS = 30;
 const MAX_OTP_SENDS = 3;
 const OTP_LOCK_MINUTES = 30;
+const WEB_RECAPTCHA_CONTAINER_ID = 'phone-otp-recaptcha-container';
 
 const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const [otpCode, setOtpCode] = useState<string>('');
@@ -31,8 +31,6 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const [canResend, setCanResend] = useState<boolean>(false);
   const [isSendingOtp, setIsSendingOtp] = useState<boolean>(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
-  const [isRecaptchaReady, setIsRecaptchaReady] = useState<boolean>(Platform.OS === 'web');
-  const [isWebRecaptchaLoading, setIsWebRecaptchaLoading] = useState<boolean>(Platform.OS === 'web');
   const [webRecaptchaError, setWebRecaptchaError] = useState<string | null>(null);
   const [otpSendCount, setOtpSendCount] = useState<number>(0);
   const [isOtpLimitReached, setIsOtpLimitReached] = useState<boolean>(false);
@@ -40,14 +38,16 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { sendPhoneOTP, signOut, verifyPhoneOTP } = useAuth();
-
-  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal | null>(null);
-  const usesNativeRecaptcha = Platform.OS !== 'web';
-
   const phoneNumber = normalizePhoneNumber(route.params?.phoneNumber ?? '');
   const verificationId = route.params?.verificationId;
   const authMode: 'signIn' | 'signUp' = route.params?.authMode === 'signUp' ? 'signUp' : 'signIn';
   const isOtpSent = !!verificationId;
+
+  useEffect(() => {
+    if (verificationId) {
+      setOtpSendCount((count) => (count === 0 ? 1 : count));
+    }
+  }, [verificationId]);
 
   useEffect(() => {
     const initializeWebRecaptcha = async () => {
@@ -55,15 +55,12 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
         return;
       }
 
-      setIsWebRecaptchaLoading(true);
       setWebRecaptchaError(null);
 
       try {
-        await prepareWebRecaptchaVerifier();
+        await prepareWebRecaptchaVerifier(WEB_RECAPTCHA_CONTAINER_ID);
       } catch (error) {
         setWebRecaptchaError((error as Error).message || 'Failed to load reCAPTCHA.');
-      } finally {
-        setIsWebRecaptchaLoading(false);
       }
     };
 
@@ -92,8 +89,6 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
 
   const sendOtp = useCallback(async () => {
     if (!phoneNumber) return;
-    if (usesNativeRecaptcha && (!isRecaptchaReady || !recaptchaVerifier.current)) return;
-
     if (!isValidE164PhoneNumber(phoneNumber)) {
       Alert.alert('Invalid phone number', 'Please enter a valid phone number in international format (e.g., +1234567890).');
       navigateBackSafely();
@@ -104,7 +99,6 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
     try {
       const { verificationId: nextVerificationId } = await sendPhoneOTP(
         phoneNumber,
-        usesNativeRecaptcha ? recaptchaVerifier.current : undefined,
       );
 
       setOtpSendCount((count) => count + 1);
@@ -130,12 +124,10 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
     }
   }, [
     authMode,
-    isRecaptchaReady,
     navigation,
     navigateBackSafely,
     phoneNumber,
     sendPhoneOTP,
-    usesNativeRecaptcha,
     verificationId,
   ]);
 
@@ -245,9 +237,9 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
             {Platform.OS === 'web' && (
               <>
                 <View
-                  nativeID="recaptcha-container"
+                  nativeID={WEB_RECAPTCHA_CONTAINER_ID}
                   style={styles.webRecaptchaContainer}
-                  {...({ id: 'recaptcha-container' } as any)}
+                  {...({ id: WEB_RECAPTCHA_CONTAINER_ID } as any)}
                 />
                 {webRecaptchaError && (
                   <Text style={styles.errorText}>{webRecaptchaError}</Text>
@@ -322,17 +314,6 @@ const PhoneOTPScreen: React.FC<PhoneOTPScreenProps> = () => {
             </TouchableOpacity>
           </View>
         </ScrollView>
-
-        {usesNativeRecaptcha && (
-          <FirebaseRecaptchaVerifierModal
-            ref={(instance) => {
-              recaptchaVerifier.current = instance;
-              setIsRecaptchaReady(!!instance);
-            }}
-            firebaseConfig={firebaseConfig}
-            attemptInvisibleVerification
-          />
-        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

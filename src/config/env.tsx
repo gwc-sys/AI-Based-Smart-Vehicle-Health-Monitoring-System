@@ -5,6 +5,7 @@ const manifest = Constants.expoConfig ?? (Constants.manifest as any) ?? {};
 export type AppEnv = {
   API_URL: string;
   EXPO_PUBLIC_API_URL?: string;
+  GOOGLE_WEB_CLIENT_ID?: string;
   FIREBASE_API_KEY?: string;
   FIREBASE_PROJECT_ID?: string;
   FIREBASE_AUTH_DOMAIN?: string;
@@ -16,6 +17,7 @@ export type AppEnv = {
 export const Env: AppEnv = {
   API_URL: process.env.EXPO_PUBLIC_API_URL ?? (manifest.extra?.apiUrl ?? 'https://api.example.com'),
   EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL ?? manifest.extra?.apiUrl,
+  GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? manifest.extra?.googleWebClientId,
   FIREBASE_API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? manifest.extra?.firebaseApiKey,
   FIREBASE_PROJECT_ID: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ?? manifest.extra?.firebaseProjectId,
   FIREBASE_AUTH_DOMAIN: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN ?? manifest.extra?.firebaseAuthDomain,

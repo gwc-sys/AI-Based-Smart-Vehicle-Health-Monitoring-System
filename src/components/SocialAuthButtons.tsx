@@ -8,20 +8,28 @@ type SocialAuthButtonsProps = {
   onPress: (provider: ProviderName) => Promise<void> | void;
   loading?: boolean;
   mode: 'login' | 'register';
+  providers?: ProviderName[];
 };
 
-const PROVIDERS: Array<{ key: ProviderName; label: string; icon: string; iconColor: string }> = [
+const PROVIDERS: { key: ProviderName; label: string; icon: string; iconColor: string }[] = [
   { key: 'google', label: 'Google', icon: 'logo-google', iconColor: '#4285F4' },
   { key: 'apple', label: 'Apple', icon: 'logo-apple', iconColor: '#111827' },
 ];
 
-export default function SocialAuthButtons({ onPress, loading = false, mode }: SocialAuthButtonsProps) {
+export default function SocialAuthButtons({
+  onPress,
+  loading = false,
+  mode,
+  providers = PROVIDERS.map((provider) => provider.key),
+}: SocialAuthButtonsProps) {
+  const enabledProviders = PROVIDERS.filter((provider) => providers.includes(provider.key));
+
   return (
     <View style={styles.wrapper}>
       <Text style={styles.sectionLabel}>{mode === 'login' ? 'Continue with' : 'Sign up with'}</Text>
 
       <View style={styles.buttons}>
-        {PROVIDERS.map((provider) => (
+        {enabledProviders.map((provider) => (
           <TouchableOpacity
             key={provider.key}
             style={[styles.button, loading && styles.disabledButton]}
@@ -46,11 +54,13 @@ export default function SocialAuthButtons({ onPress, loading = false, mode }: So
         </View>
       )}
 
-      {Platform.OS !== 'web' && (
+      {Platform.OS !== 'web' &&
+        enabledProviders.some((provider) => provider.key === 'google') &&
+        !enabledProviders.some((provider) => provider.key === 'apple') && (
         <Text style={styles.noteText}>
-          Social sign-in is currently configured for web popup flow in this app.
+          Google sign-in uses the native Android flow here.
         </Text>
-      )}
+        )}
     </View>
   );
 }
