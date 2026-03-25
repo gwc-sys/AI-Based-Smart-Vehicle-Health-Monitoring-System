@@ -1090,3 +1090,48 @@ I0325 10:54:17.716552   27896 dev.go:104] Listening on address (HTTP + gRPC): 12
 [debug] [2026-03-25T05:24:19.280Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects [omitted]
 [info] [Firebase Plugin] Stopping Data Connect toolkit
 [warn] !  Data Connect Emulator has exited upon receiving signal: SIGINT 
+[debug] [2026-03-25T16:37:48.508Z] [Firebase Plugin] Activating Firebase extension.
+[debug] [2026-03-25T16:37:58.744Z] [Firebase Plugin] requireAuthWrapper
+[debug] [2026-03-25T16:37:58.747Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-25T16:37:58.748Z] > authorizing via signed-in user (maheshraskargwc@gmail.com)
+[debug] [2026-03-25T16:37:58.753Z] Checked if tokens are valid: false, expires at: 1774419857324
+[debug] [2026-03-25T16:37:58.753Z] Checked if tokens are valid: false, expires at: 1774419857324
+[debug] [2026-03-25T16:37:58.754Z] > refreshing access token with scopes: []
+[debug] [2026-03-25T16:37:58.756Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-25T16:37:58.757Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-25T16:37:58.773Z] [Firebase Plugin] VSCode notification server listening on port 40001
+[info] [Firebase Plugin] Starting Data Connect toolkit (version 3.2.1) on port 50001
+[debug] [2026-03-25T16:38:01.238Z] I0325 22:08:01.225302   22872 control.go:100] [projects/emulator/locations/emulator/services/ai-vehicle-health-monitoring-app 49f7] UpdateResources(): done
+Main schema: sources: schema\schema.gql [343B] 
+Connector "example": sources: example\queries.gql [833B] 
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0325 22:08:01.225302   22872 control.go:100] [projects/emulator/locations/emulator/services/ai-vehicle-health-monitoring-app 49f7] UpdateResources(): done\nMain schema: sources: schema\\schema.gql [343B] \nConnector \"example\": sources: example\\queries.gql [833B] \n"}}
+[debug] [2026-03-25T16:38:01.239Z] Ignoring unsupported arg: auto_download {"metadata":{"emulator":{"name":"dataconnect"},"message":"Ignoring unsupported arg: auto_download"}}
+[debug] [2026-03-25T16:38:01.239Z] Ignoring unsupported arg: port {"metadata":{"emulator":{"name":"dataconnect"},"message":"Ignoring unsupported arg: port"}}
+[debug] [2026-03-25T16:38:01.240Z] Starting Data Connect Emulator with command {"binary":"C:\\Users\\mahes\\.cache\\firebase\\emulators\\dataconnect-emulator-3.2.1.exe","args":["--logtostderr","-v=2","dev","--listen=localhost:50001","--config_dir=d:\\college Project\\IOT Application\\AI-Vehicle-Health-Monitoring-App\\dataconnect","--enable_output_schema_extensions=true","--enable_output_generated_sdk=true"],"optionalArgs":["listen","config_dir","enable_output_schema_extensions","enable_output_generated_sdk"],"joinArgs":true,"shell":false,"port":9399} {"metadata":{"emulator":{"name":"dataconnect"},"message":"Starting Data Connect Emulator with command {\"binary\":\"C:\\\\Users\\\\mahes\\\\.cache\\\\firebase\\\\emulators\\\\dataconnect-emulator-3.2.1.exe\",\"args\":[\"--logtostderr\",\"-v=2\",\"dev\",\"--listen=localhost:50001\",\"--config_dir=d:\\\\college Project\\\\IOT Application\\\\AI-Vehicle-Health-Monitoring-App\\\\dataconnect\",\"--enable_output_schema_extensions=true\",\"--enable_output_generated_sdk=true\"],\"optionalArgs\":[\"listen\",\"config_dir\",\"enable_output_schema_extensions\",\"enable_output_generated_sdk\"],\"joinArgs\":true,\"shell\":false,\"port\":9399}"}}
+[info] i  dataconnect: Data Connect Emulator logging to dataconnect-debug.log {"metadata":{"emulator":{"name":"dataconnect"},"message":"Data Connect Emulator logging to \u001b[1mdataconnect-debug.log\u001b[22m"}}
+[debug] [2026-03-25T16:38:01.295Z] I0325 22:08:01.288889   20512 load.go:31] Reloading schema and connectors...
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0325 22:08:01.288889   20512 load.go:31] Reloading schema and connectors...\n"}}
+[debug] [2026-03-25T16:38:01.309Z] I0325 22:08:01.307171   20512 control.go:100] [projects/emulator/locations/emulator/services/ai-vehicle-health-monitoring-app 1010] UpdateResources(): done
+Main schema: sources: schema\schema.gql [343B] 
+Connector "example": sources: example\queries.gql [833B] 
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0325 22:08:01.307171   20512 control.go:100] [projects/emulator/locations/emulator/services/ai-vehicle-health-monitoring-app 1010] UpdateResources(): done\nMain schema: sources: schema\\schema.gql [343B] \nConnector \"example\": sources: example\\queries.gql [833B] \n"}}
+[debug] [2026-03-25T16:38:01.357Z] I0325 22:08:01.328135   20512 codegen.go:80] [connector "example" javascriptSdk] Generating sources into "d:\\college Project\\IOT Application\\AI-Vehicle-Health-Monitoring-App\\src\\dataconnect-generated"
+I0325 22:08:01.342562   20512 collector.go:107] schema extensions wrote into "d:\\college Project\\IOT Application\\AI-Vehicle-Health-Monitoring-App\\dataconnect\\.dataconnect\\schema"
+Generated sources: main\relation.gql [11411B] main\query.gql [3723B] main\mutation.gql [9955B] prelude.gql [80731B] main\implicit.gql [1466B] main\input.gql [24323B] 
+I0325 22:08:01.349773   20512 collector.go:107] connector "example" javascriptSdk wrote into "d:\\college Project\\IOT Application\\AI-Vehicle-Health-Monitoring-App\\src\\dataconnect-generated"
+Generated sources: index.d.ts [3777B] README.md [20897B] react\package.json [460B] react\README.md [27497B] .guides/setup.md [1682B] .guides/config.json [236B] react\index.d.ts [2034B] react\esm\package.json [17B] react\index.cjs.js [1667B] .guides/usage.md [2303B] esm\index.esm.js [1742B] esm\package.json [17B] index.cjs.js [2012B] package.json [863B] react\esm\index.esm.js [1577B] 
+I0325 22:08:01.351969   20512 installsdk.go:55] Package @dataconnect/generated is already installed. Skipping installation
+I0325 22:08:01.351969   20512 load.go:109] Finished reloading
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0325 22:08:01.328135   20512 codegen.go:80] [connector \"example\" javascriptSdk] Generating sources into \"d:\\\\college Project\\\\IOT Application\\\\AI-Vehicle-Health-Monitoring-App\\\\src\\\\dataconnect-generated\"\nI0325 22:08:01.342562   20512 collector.go:107] schema extensions wrote into \"d:\\\\college Project\\\\IOT Application\\\\AI-Vehicle-Health-Monitoring-App\\\\dataconnect\\\\.dataconnect\\\\schema\"\nGenerated sources: main\\relation.gql [11411B] main\\query.gql [3723B] main\\mutation.gql [9955B] prelude.gql [80731B] main\\implicit.gql [1466B] main\\input.gql [24323B] \nI0325 22:08:01.349773   20512 collector.go:107] connector \"example\" javascriptSdk wrote into \"d:\\\\college Project\\\\IOT Application\\\\AI-Vehicle-Health-Monitoring-App\\\\src\\\\dataconnect-generated\"\nGenerated sources: index.d.ts [3777B] README.md [20897B] react\\package.json [460B] react\\README.md [27497B] .guides/setup.md [1682B] .guides/config.json [236B] react\\index.d.ts [2034B] react\\esm\\package.json [17B] react\\index.cjs.js [1667B] .guides/usage.md [2303B] esm\\index.esm.js [1742B] esm\\package.json [17B] index.cjs.js [2012B] package.json [863B] react\\esm\\index.esm.js [1577B] \nI0325 22:08:01.351969   20512 installsdk.go:55] Package @dataconnect/generated is already installed. Skipping installation\nI0325 22:08:01.351969   20512 load.go:109] Finished reloading\n"}}
+[debug] [2026-03-25T16:38:01.383Z] I0325 22:08:01.370254   20512 dev.go:104] Listening on address (HTTP + gRPC): 127.0.0.1:50001
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0325 22:08:01.370254   20512 dev.go:104] Listening on address (HTTP + gRPC): 127.0.0.1:50001\n"}}
+[debug] [2026-03-25T16:38:01.422Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-03-25T16:38:01.423Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-25T16:38:01.439Z] [Firebase Plugin] User found:  maheshraskargwc@gmail.com
+[info] [Firebase Plugin] (Core:Project) New user detected, fetching projects
+[debug] [2026-03-25T16:38:01.443Z] Checked if tokens are valid: true, expires at: 1774460280424
+[debug] [2026-03-25T16:38:01.445Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-03-25T16:38:01.600Z] I0325 22:08:01.579167   20512 engine.go:210] [projects/emulator/locations/emulator/services/ai-vehicle-health-monitoring-app 1010] ExecuteGraphqlRead query IntrospectionQuery: succeeded. 
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0325 22:08:01.579167   20512 engine.go:210] [projects/emulator/locations/emulator/services/ai-vehicle-health-monitoring-app 1010] ExecuteGraphqlRead query IntrospectionQuery: succeeded. \n"}}
+[debug] [2026-03-25T16:38:02.376Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-03-25T16:38:02.377Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects [omitted]
