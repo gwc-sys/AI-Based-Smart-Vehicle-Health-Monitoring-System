@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useAppTheme } from '@/context/ThemeContext';
 
 type SensorStatus = 'normal' | 'warning' | 'critical' | 'inactive';
 
@@ -36,6 +37,9 @@ export default function SensorCard({
   onPress,
   active = false,
 }: SensorCardProps) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
   return (
     <TouchableOpacity
       style={[styles.card, active && styles.cardActive]}
@@ -54,57 +58,64 @@ export default function SensorCard({
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    flexBasis: '48%',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  cardActive: {
-    borderWidth: 2,
-    borderColor: '#0A7EA4',
-  },
-  accentBar: {
-    width: 42,
-    height: 5,
-    borderRadius: 999,
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1B2A41',
-    minHeight: 36,
-  },
-  value: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#11181C',
-    marginTop: 10,
-  },
-  subtitle: {
-    fontSize: 12,
-    color: '#687076',
-    marginTop: 6,
-    minHeight: 32,
-  },
-  statusBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginTop: 10,
-  },
-  statusText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-});
+const createStyles = (colors: {
+  card: string;
+  tint: string;
+  text: string;
+  icon: string;
+  shadow: string;
+}) =>
+  StyleSheet.create({
+    card: {
+      flexBasis: '48%',
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 14,
+      marginBottom: 12,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    cardActive: {
+      borderWidth: 2,
+      borderColor: colors.tint,
+    },
+    accentBar: {
+      width: 42,
+      height: 5,
+      borderRadius: 999,
+      marginBottom: 12,
+    },
+    title: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.text,
+      minHeight: 36,
+    },
+    value: {
+      fontSize: 22,
+      fontWeight: '800',
+      color: colors.text,
+      marginTop: 10,
+    },
+    subtitle: {
+      fontSize: 12,
+      color: colors.icon,
+      marginTop: 6,
+      minHeight: 32,
+    },
+    statusBadge: {
+      alignSelf: 'flex-start',
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      marginTop: 10,
+    },
+    statusText: {
+      color: '#fff',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+  });

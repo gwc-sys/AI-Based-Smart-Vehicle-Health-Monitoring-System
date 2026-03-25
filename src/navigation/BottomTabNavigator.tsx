@@ -4,9 +4,9 @@ import DashboardScreen from '@/screens/DashboardScreen';
 import PredictionScreen from '@/screens/PredictionScreen';
 import ProfileScreen from '@/screens/ProfileScreen';
 import SettingsScreen from '@/screens/SettingsScreen';
+import { useAppTheme } from '@/context/ThemeContext';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import React from 'react';
-import { Colors } from '../../constants/theme';
 
 export type MainTabParamList = {
   Dashboard: undefined;
@@ -29,20 +29,22 @@ function TabIcon({ routeName, color, size }: TabIconProps) {
 }
 
 export default function BottomTabNavigator() {
+  const { colors } = useAppTheme();
+
   return (
     <Tab.Navigator
       initialRouteName="Dashboard"
       backBehavior="history"
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: Colors.light.tint,
-        tabBarInactiveTintColor: Colors.light.icon,
+        tabBarActiveTintColor: colors.tint,
+        tabBarInactiveTintColor: colors.icon,
         tabBarStyle: {
           height: 64,
           paddingTop: 6,
           paddingBottom: 8,
-          borderTopColor: Colors.light.border,
-          backgroundColor: '#fff',
+          borderTopColor: colors.border,
+          backgroundColor: colors.card,
         },
         tabBarLabelStyle: {
           fontSize: 11,

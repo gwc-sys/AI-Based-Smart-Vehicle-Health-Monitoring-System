@@ -1,5 +1,6 @@
 import { useAnalytics } from '@/hooks/useAnalytics';
 import AppIcon from '@/components/AppIcon';
+import { useAppTheme } from '@/context/ThemeContext';
 import useAuth from '@/hooks/useAuth';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useVehicleData } from '@/hooks/useVehicleData';
@@ -23,7 +24,6 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { Colors } from '../../constants/theme';
 
 interface UserPreferences {
   notifications: boolean;
@@ -41,6 +41,8 @@ interface UserStats {
 
 export default function ProfileScreen() {
   const { user, signOut, updateUserProfile, updateUserPreferences } = useAuth();
+  const { colors, isDarkMode, setDarkMode } = useAppTheme();
+  const styles = createStyles(colors);
   const { vehicles, loading: vehiclesLoading, refresh } = useVehicleData();
   const { isConnected } = useNetworkStatus();
   const { trackEvent } = useAnalytics();
@@ -102,6 +104,10 @@ export default function ProfileScreen() {
     loadUserStats();
     loadProfileImage();
   }, [loadUserPreferences, loadUserStats, loadProfileImage]);
+
+  useEffect(() => {
+    setPreferences(prev => ({ ...prev, darkMode: isDarkMode }));
+  }, [isDarkMode]);
 
   const fetchUserStats = async (userId?: string) => {
     // Simulated API call - replace with actual API
@@ -221,6 +227,9 @@ export default function ProfileScreen() {
       const newPrefs = { ...prev, [key]: value };
       AsyncStorage.setItem('userPreferences', JSON.stringify(newPrefs));
       updateUserPreferences(newPrefs);
+      if (key === 'darkMode') {
+        setDarkMode(Boolean(value)).catch(() => undefined);
+      }
       return newPrefs;
     });
   };
@@ -269,7 +278,7 @@ export default function ProfileScreen() {
 
   const renderStatCard = (icon: string, label: string, value: string | number) => (
     <View style={styles.statCard}>
-      <AppIcon name={icon} size={24} color={Colors.light.tint} />
+      <AppIcon name={icon} size={24} color={colors.tint} />
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
@@ -315,17 +324,17 @@ export default function ProfileScreen() {
         {/* Action Buttons */}
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.actionButton} onPress={handleEditProfile}>
-            <AppIcon name="pencil" size={20} color={Colors.light.tint} />
+            <AppIcon name="pencil" size={20} color={colors.tint} />
             <Text style={styles.actionButtonText}>Edit Profile</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionButton} onPress={handleShareProfile}>
-            <AppIcon name="share-social" size={20} color={Colors.light.tint} />
+            <AppIcon name="share-social" size={20} color={colors.tint} />
             <Text style={styles.actionButtonText}>Share</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.actionButton} onPress={() => setShowSettingsModal(true)}>
-            <AppIcon name="settings" size={20} color={Colors.light.tint} />
+            <AppIcon name="settings" size={20} color={colors.tint} />
             <Text style={styles.actionButtonText}>Settings</Text>
           </TouchableOpacity>
         </View>
@@ -373,7 +382,7 @@ export default function ProfileScreen() {
             
             {vehicles.slice(0, 2).map((vehicle, index) => (
               <View key={vehicle.id || index} style={styles.vehicleCard}>
-                <AppIcon name="car" size={24} color={Colors.light.tint} />
+                <AppIcon name="car" size={24} color={colors.tint} />
                 <View style={styles.vehicleInfo}>
                   <Text style={styles.vehicleName}>
                     {vehicle.make} {vehicle.model} {vehicle.year}
@@ -382,7 +391,7 @@ export default function ProfileScreen() {
                     {vehicle.plateNumber} • {vehicle.fuelType}
                   </Text>
                 </View>
-                <AppIcon name="chevron-forward" size={20} color={Colors.light.icon} />
+                <AppIcon name="chevron-forward" size={20} color={colors.icon} />
               </View>
             ))}
           </View>
@@ -393,21 +402,21 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Support</Text>
           
           <TouchableOpacity style={styles.supportItem} onPress={handleContactSupport}>
-            <AppIcon name="mail" size={20} color={Colors.light.tint} />
+            <AppIcon name="mail" size={20} color={colors.tint} />
             <Text style={styles.supportItemText}>Contact Support</Text>
-            <AppIcon name="chevron-forward" size={20} color={Colors.light.icon} />
+            <AppIcon name="chevron-forward" size={20} color={colors.icon} />
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.supportItem} onPress={() => Linking.openURL('https://yourapp.com/faq')}>
-            <AppIcon name="help-circle" size={20} color={Colors.light.tint} />
+            <AppIcon name="help-circle" size={20} color={colors.tint} />
             <Text style={styles.supportItemText}>FAQ & Help</Text>
-            <AppIcon name="chevron-forward" size={20} color={Colors.light.icon} />
+            <AppIcon name="chevron-forward" size={20} color={colors.icon} />
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.supportItem} onPress={() => Linking.openURL('https://yourapp.com/privacy')}>
-            <AppIcon name="document-text" size={20} color={Colors.light.tint} />
+            <AppIcon name="document-text" size={20} color={colors.tint} />
             <Text style={styles.supportItemText}>Privacy Policy</Text>
-            <AppIcon name="chevron-forward" size={20} color={Colors.light.icon} />
+            <AppIcon name="chevron-forward" size={20} color={colors.icon} />
           </TouchableOpacity>
         </View>
 
@@ -449,7 +458,7 @@ export default function ProfileScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Edit Profile</Text>
               <TouchableOpacity onPress={() => setShowEditModal(false)}>
-                <AppIcon name="close" size={24} color={Colors.light.text} />
+                <AppIcon name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
 
@@ -495,7 +504,7 @@ export default function ProfileScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Settings</Text>
               <TouchableOpacity onPress={() => setShowSettingsModal(false)}>
-                <AppIcon name="close" size={24} color={Colors.light.text} />
+                <AppIcon name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
 
@@ -505,7 +514,7 @@ export default function ProfileScreen() {
                 <Switch
                   value={preferences.notifications}
                   onValueChange={(value) => handleTogglePreference('notifications', value)}
-                  trackColor={{ false: '#767577', true: Colors.light.tint }}
+                  trackColor={{ false: '#767577', true: colors.tint }}
                 />
               </View>
 
@@ -514,15 +523,15 @@ export default function ProfileScreen() {
                 <Switch
                   value={preferences.darkMode}
                   onValueChange={(value) => handleTogglePreference('darkMode', value)}
-                  trackColor={{ false: '#767577', true: Colors.light.tint }}
+                  trackColor={{ false: '#767577', true: colors.tint }}
                 />
               </View>
 
               <View style={styles.settingItem}>
                 <Text style={styles.settingLabel}>Language</Text>
                 <TouchableOpacity style={styles.settingValue}>
-                  <Text>English</Text>
-                  <AppIcon name="chevron-down" size={20} color={Colors.light.icon} />
+                  <Text style={styles.settingValueText}>English</Text>
+                  <AppIcon name="chevron-down" size={20} color={colors.icon} />
                 </TouchableOpacity>
               </View>
 
@@ -561,17 +570,26 @@ export default function ProfileScreen() {
 
 // Helper component for info rows
 const InfoRow = ({ icon, label, value }: { icon: string; label: string; value: string }) => (
-  <View style={styles.infoRow}>
-    <AppIcon name={icon} size={20} color={Colors.light.icon} />
-    <Text style={styles.infoLabel}>{label}:</Text>
-    <Text style={styles.infoValue}>{value}</Text>
-  </View>
+  <ThemedInfoRow icon={icon} label={label} value={value} />
 );
 
-const styles = StyleSheet.create({
+function ThemedInfoRow({ icon, label, value }: { icon: string; label: string; value: string }) {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+
+  return (
+    <View style={styles.infoRow}>
+      <AppIcon name={icon} size={20} color={colors.icon} />
+      <Text style={styles.infoLabel}>{label}:</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  );
+}
+
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.light.background,
+    backgroundColor: colors.background,
   },
   scrollContent: {
     padding: 20,
@@ -594,7 +612,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: Colors.light.tint,
+    backgroundColor: colors.tint,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -608,24 +626,24 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: Colors.light.tint,
+    backgroundColor: colors.tint,
     width: 24,
     height: 24,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: colors.card,
   },
   userName: {
     fontSize: 24,
     fontWeight: '700',
-    color: Colors.light.text,
+    color: colors.text,
     marginBottom: 4,
   },
   userEmail: {
     fontSize: 14,
-    color: Colors.light.icon,
+    color: colors.icon,
     marginBottom: 8,
   },
   offlineBadge: {
@@ -647,10 +665,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginBottom: 24,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 12,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -661,7 +679,7 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: 12,
-    color: Colors.light.text,
+    color: colors.text,
     marginTop: 4,
   },
   section: {
@@ -676,11 +694,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.light.text,
+    color: colors.text,
     marginBottom: 12,
   },
   viewAllText: {
-    color: Colors.light.tint,
+    color: colors.tint,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -691,12 +709,12 @@ const styles = StyleSheet.create({
   },
   statCard: {
     width: '48%',
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -705,19 +723,19 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 20,
     fontWeight: '700',
-    color: Colors.light.text,
+    color: colors.text,
     marginTop: 8,
   },
   statLabel: {
     fontSize: 12,
-    color: Colors.light.icon,
+    color: colors.icon,
     marginTop: 4,
   },
   infoCard: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -728,27 +746,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.light.border,
+    borderBottomColor: colors.border,
   },
   infoLabel: {
     fontSize: 14,
-    color: Colors.light.icon,
+    color: colors.icon,
     marginLeft: 12,
     flex: 1,
   },
   infoValue: {
     fontSize: 14,
-    color: Colors.light.text,
+    color: colors.text,
     fontWeight: '500',
   },
   vehicleCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 8,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
@@ -761,21 +779,21 @@ const styles = StyleSheet.create({
   vehicleName: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.light.text,
+    color: colors.text,
   },
   vehicleDetails: {
     fontSize: 12,
-    color: Colors.light.icon,
+    color: colors.icon,
     marginTop: 2,
   },
   supportItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     padding: 16,
     borderRadius: 12,
     marginBottom: 8,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
@@ -785,13 +803,13 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
     fontSize: 14,
-    color: Colors.light.text,
+    color: colors.text,
   },
   buttonContainer: {
     marginTop: 24,
   },
   logoutButton: {
-    backgroundColor: Colors.light.tint,
+    backgroundColor: colors.tint,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -816,23 +834,23 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 12,
-    color: Colors.light.icon,
+    color: colors.icon,
     textAlign: 'center',
     marginTop: 24,
   },
   footerSubtext: {
     fontSize: 10,
-    color: Colors.light.icon,
+    color: colors.icon,
     textAlign: 'center',
     marginTop: 4,
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
@@ -843,31 +861,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.light.border,
+    borderBottomColor: colors.border,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.light.text,
+    color: colors.text,
   },
   modalBody: {
     padding: 20,
   },
   inputLabel: {
     fontSize: 14,
-    color: Colors.light.icon,
+    color: colors.icon,
     marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: Colors.light.border,
+    borderColor: colors.border,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
     marginBottom: 16,
+    color: colors.text,
+    backgroundColor: colors.inputBackground,
   },
   saveButton: {
-    backgroundColor: Colors.light.tint,
+    backgroundColor: colors.tint,
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
@@ -887,20 +907,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.light.border,
+    borderBottomColor: colors.border,
   },
   settingLabel: {
     fontSize: 16,
-    color: Colors.light.text,
+    color: colors.text,
   },
   settingValue: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
+  settingValueText: {
+    color: colors.text,
+  },
   unitSelector: {
     flexDirection: 'row',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: colors.mutedSurface,
     borderRadius: 8,
     overflow: 'hidden',
   },
@@ -909,24 +932,24 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   selectedUnit: {
-    backgroundColor: Colors.light.tint,
+    backgroundColor: colors.tint,
   },
   unitText: {
     fontSize: 14,
-    color: Colors.light.text,
+    color: colors.text,
   },
   selectedUnitText: {
     color: '#fff',
   },
   clearCacheButton: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: colors.mutedSurface,
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 20,
   },
   clearCacheText: {
-    color: Colors.light.text,
+    color: colors.text,
     fontSize: 14,
     fontWeight: '500',
   },

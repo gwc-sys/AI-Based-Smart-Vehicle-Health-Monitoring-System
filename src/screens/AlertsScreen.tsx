@@ -1,4 +1,5 @@
 import AppIcon from '@/components/AppIcon';
+import { useAppTheme } from '@/context/ThemeContext';
 import React, { useEffect, useState } from 'react';
 import {
     Alert,
@@ -9,7 +10,6 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '../../constants/theme';
 
 type AlertItem = {
   id: string;
@@ -27,6 +27,8 @@ const mockAlerts: AlertItem[] = [
 ];
 
 export default function AlertsScreen() {
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export default function AlertsScreen() {
       case 'warning':
         return '#FF9500';
       default:
-        return Colors.light.tint;
+        return colors.tint;
     }
   };
 
@@ -78,7 +80,7 @@ export default function AlertsScreen() {
               <View style={styles.cardActions}>
                 {!a.seen && (
                   <TouchableOpacity onPress={() => markAsRead(a.id)} style={styles.iconButton}>
-                    <AppIcon name="checkmark-done-outline" size={20} color={Colors.light.tint} />
+                    <AppIcon name="checkmark-done-outline" size={20} color={colors.tint} />
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity onPress={() => dismissAlert(a.id)} style={styles.iconButton}>
@@ -93,17 +95,34 @@ export default function AlertsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.light.background },
-  container: { padding: 20 },
-  title: { fontSize: 20, fontWeight: '700', color: Colors.light.text, marginBottom: 12 },
-  empty: { color: Colors.light.icon },
-  card: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', padding: 12, borderRadius: 10, marginBottom: 12 },
-  cardLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  levelDot: { width: 12, height: 12, borderRadius: 6 },
-  alertTitle: { fontSize: 14, fontWeight: '700', color: Colors.light.text },
-  alertMessage: { fontSize: 12, color: Colors.light.icon },
-  alertTime: { fontSize: 11, color: Colors.light.icon, marginTop: 6 },
-  cardActions: { flexDirection: 'row', marginLeft: 8 },
-  iconButton: { padding: 8 },
-});
+const createStyles = (colors: {
+  background: string;
+  card: string;
+  text: string;
+  icon: string;
+  border: string;
+}) =>
+  StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: colors.background },
+    container: { padding: 20 },
+    title: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 12 },
+    empty: { color: colors.icon },
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: colors.card,
+      padding: 12,
+      borderRadius: 10,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    cardLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    levelDot: { width: 12, height: 12, borderRadius: 6 },
+    alertTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+    alertMessage: { fontSize: 12, color: colors.icon },
+    alertTime: { fontSize: 11, color: colors.icon, marginTop: 6 },
+    cardActions: { flexDirection: 'row', marginLeft: 8 },
+    iconButton: { padding: 8 },
+  });

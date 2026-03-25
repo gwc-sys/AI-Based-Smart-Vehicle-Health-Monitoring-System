@@ -1,4 +1,5 @@
 import useAuth from '@/hooks/useAuth';
+import { useAppTheme } from '@/context/ThemeContext';
 import React, { useEffect, useState } from 'react';
 import {
     Alert,
@@ -10,7 +11,6 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '../../constants/theme';
 
 type Preferences = {
   notifications: boolean;
@@ -21,17 +21,23 @@ type Preferences = {
 
 export default function SettingsScreen() {
   const { user, updateUserPreferences } = useAuth();
+  const { colors, isDarkMode, setDarkMode } = useAppTheme();
+  const styles = createStyles(colors);
   const [prefs, setPrefs] = useState<Preferences>({ notifications: true, darkMode: false, language: 'en', measurementUnit: 'metric' });
 
   useEffect(() => {
     // in a real app load preferences from API or AsyncStorage
-  }, []);
+    setPrefs(prev => ({ ...prev, darkMode: isDarkMode }));
+  }, [isDarkMode]);
 
-  const togglePref = (key: keyof Preferences, value: any) => {
+  const togglePref = async (key: keyof Preferences, value: any) => {
     const next = { ...prefs, [key]: value } as Preferences;
     setPrefs(next);
     try {
-      updateUserPreferences(next);
+      if (key === 'darkMode') {
+        await setDarkMode(Boolean(value));
+      }
+      await updateUserPreferences(next);
     } catch {
       Alert.alert('Error', 'Failed to save preferences');
     }
@@ -44,12 +50,12 @@ export default function SettingsScreen() {
 
         <View style={styles.row}>
           <Text style={styles.label}>Push Notifications</Text>
-          <Switch value={prefs.notifications} onValueChange={(v) => togglePref('notifications', v)} trackColor={{ true: Colors.light.tint, false: '#767577' }} />
+          <Switch value={prefs.notifications} onValueChange={(v) => togglePref('notifications', v)} trackColor={{ true: colors.tint, false: '#767577' }} />
         </View>
 
         <View style={styles.row}>
           <Text style={styles.label}>Dark Mode</Text>
-          <Switch value={prefs.darkMode} onValueChange={(v) => togglePref('darkMode', v)} trackColor={{ true: Colors.light.tint, false: '#767577' }} />
+          <Switch value={prefs.darkMode} onValueChange={(v) => togglePref('darkMode', v)} trackColor={{ true: colors.tint, false: '#767577' }} />
         </View>
 
         <View style={styles.row}>
@@ -76,19 +82,36 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.light.background },
-  container: { padding: 20 },
-  title: { fontSize: 20, fontWeight: '700', color: Colors.light.text, marginBottom: 20 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  label: { fontSize: 14, color: Colors.light.text },
-  unitRow: { flexDirection: 'row' },
-  unit: { backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginLeft: 8 },
-  unitSelected: { backgroundColor: Colors.light.tint },
-  unitText: { color: Colors.light.text },
-  unitTextSelected: { color: '#fff', fontWeight: '700' },
-  clearButton: { marginTop: 20, padding: 12, backgroundColor: '#f0f0f0', borderRadius: 8, alignItems: 'center' },
-  clearText: { color: Colors.light.text },
-  footer: { marginTop: 30, alignItems: 'center' },
-  footerText: { fontSize: 12, color: Colors.light.icon },
-});
+const createStyles = (colors: {
+  background: string;
+  card: string;
+  tint: string;
+  text: string;
+  icon: string;
+  border: string;
+  mutedSurface: string;
+}) =>
+  StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: colors.background },
+    container: { padding: 20 },
+    title: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 20 },
+    row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    label: { fontSize: 14, color: colors.text },
+    unitRow: { flexDirection: 'row' },
+    unit: {
+      backgroundColor: colors.card,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      marginLeft: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    unitSelected: { backgroundColor: colors.tint, borderColor: colors.tint },
+    unitText: { color: colors.text },
+    unitTextSelected: { color: '#fff', fontWeight: '700' },
+    clearButton: { marginTop: 20, padding: 12, backgroundColor: colors.mutedSurface, borderRadius: 8, alignItems: 'center' },
+    clearText: { color: colors.text },
+    footer: { marginTop: 30, alignItems: 'center' },
+    footerText: { fontSize: 12, color: colors.icon },
+  });

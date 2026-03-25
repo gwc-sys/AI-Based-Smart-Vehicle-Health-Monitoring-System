@@ -3,10 +3,11 @@ import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from '@/navigation/AppNavigator';
 import { AuthProvider } from '@/context/AuthContext';
+import { ThemeProvider, useAppTheme } from '@/context/ThemeContext';
 import { VehicleProvider } from '@/context/VehicleContext';
 import { initFirebase } from '@/services/firebaseConfig';
 
@@ -54,16 +55,52 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <VehicleProvider>
-            <NavigationContainer>
-              <AppNavigator />
-              <StatusBar style="auto" />
-            </NavigationContainer>
-          </VehicleProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <ThemedApp />
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+function ThemedApp() {
+  const { colors, isDarkMode } = useAppTheme();
+
+  const navigationTheme = isDarkMode
+    ? {
+        ...DarkTheme,
+        colors: {
+          ...DarkTheme.colors,
+          primary: colors.tint,
+          background: colors.background,
+          card: colors.card,
+          text: colors.text,
+          border: colors.border,
+          notification: colors.tint,
+        },
+      }
+    : {
+        ...DefaultTheme,
+        colors: {
+          ...DefaultTheme.colors,
+          primary: colors.tint,
+          background: colors.background,
+          card: colors.card,
+          text: colors.text,
+          border: colors.border,
+          notification: colors.tint,
+        },
+      };
+
+  return (
+    <AuthProvider>
+      <VehicleProvider>
+        <NavigationContainer theme={navigationTheme}>
+          <AppNavigator />
+          <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+        </NavigationContainer>
+      </VehicleProvider>
+    </AuthProvider>
   );
 }
 
