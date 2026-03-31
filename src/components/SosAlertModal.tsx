@@ -10,8 +10,58 @@ type SosAlertModalProps = {
   onClose: () => void;
   alert: VehicleRealtimeAlert | null;
   reading: VehicleRealtimeReading | null;
+  fallbackLocationReading?: VehicleRealtimeReading | null;
   deviceId?: string | null;
 };
+
+function hasGpsCoordinates(reading: VehicleRealtimeReading | null | undefined) {
+  return (
+    typeof reading?.gps_lat === 'number' &&
+    Number.isFinite(reading.gps_lat) &&
+    typeof reading?.gps_lon === 'number' &&
+    Number.isFinite(reading.gps_lon)
+  );
+}
+
+function alertToReading(alert: VehicleRealtimeAlert | null): VehicleRealtimeReading | null {
+  if (!alert) {
+    return null;
+  }
+
+  return {
+    gps_altitude: alert.gps_altitude,
+    gps_lat: alert.gps_lat ?? alert.latitude,
+    gps_lon: alert.gps_lon ?? alert.longitude,
+    gps_sats: alert.gps_sats ?? alert.satellites,
+    gps_speed_kmh: alert.gps_speed_kmh ?? alert.speed_kmh,
+    timestamp: alert.timestamp,
+  };
+}
+
+function resolveSosReading(
+  alert: VehicleRealtimeAlert | null,
+  reading: VehicleRealtimeReading | null,
+  fallbackLocationReading: VehicleRealtimeReading | null | undefined
+) {
+  const alertReading = alertToReading(alert);
+
+  if (hasGpsCoordinates(alertReading)) {
+    return {
+      ...reading,
+      ...alertReading,
+    };
+  }
+
+  if (hasGpsCoordinates(reading) || !hasGpsCoordinates(fallbackLocationReading)) {
+    return reading;
+  }
+
+  return {
+    ...reading,
+    gps_lat: fallbackLocationReading?.gps_lat,
+    gps_lon: fallbackLocationReading?.gps_lon,
+  };
+}
 
 function formatLiveTimestamp(timestamp?: number, receivedAt?: number) {
   const sourceTime =
@@ -84,23 +134,24 @@ export default function SosAlertModal({
   onClose,
   alert,
   reading,
+  fallbackLocationReading,
   deviceId,
 }: SosAlertModalProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const resolvedReading = resolveSosReading(alert, reading, fallbackLocationReading);
   const resolvedDeviceId = alert?.device_id ?? deviceId ?? 'Unknown device';
-  const latitude = reading?.gps_lat;
-  const longitude = reading?.gps_lon;
-  const hasCoordinates =
-    typeof latitude === 'number' &&
-    Number.isFinite(latitude) &&
-    typeof longitude === 'number' &&
-    Number.isFinite(longitude);
+  const latitude = resolvedReading?.gps_lat;
+  const longitude = resolvedReading?.gps_lon;
+  const hasCoordinates = hasGpsCoordinates(resolvedReading);
 
-  const mapUrl = hasCoordinates ? createMapUrl(latitude, longitude) : null;
+  const mapUrl =
+    hasCoordinates && typeof latitude === 'number' && typeof longitude === 'number'
+      ? createMapUrl(latitude, longitude)
+      : null;
 
   const openExternalMap = () => {
-    if (!hasCoordinates) {
+    if (!hasCoordinates || typeof latitude !== 'number' || typeof longitude !== 'number') {
       return;
     }
 
@@ -162,7 +213,7 @@ export default function SosAlertModal({
                 <View style={styles.mapFallback}>
                   <Text style={styles.mapFallbackTitle}>Map unavailable</Text>
                   <Text style={styles.mapFallbackText}>
-                    Latitude and longitude are not available in the latest SOS reading yet.
+                    Latitude and longitude are not available in Firebase yet.
                   </Text>
                 </View>
               )}
@@ -181,27 +232,27 @@ export default function SosAlertModal({
             <View style={styles.detailGrid}>
               <View style={styles.detailCard}>
                 <Text style={styles.detailLabel}>Latitude</Text>
-                <Text style={styles.detailValue}>{formatGpsValue(reading?.gps_lat, 6)}</Text>
+                <Text style={styles.detailValue}>{formatGpsValue(resolvedReading?.gps_lat, 6)}</Text>
               </View>
               <View style={styles.detailCard}>
                 <Text style={styles.detailLabel}>Longitude</Text>
-                <Text style={styles.detailValue}>{formatGpsValue(reading?.gps_lon, 6)}</Text>
+                <Text style={styles.detailValue}>{formatGpsValue(resolvedReading?.gps_lon, 6)}</Text>
               </View>
               <View style={styles.detailCard}>
                 <Text style={styles.detailLabel}>Satellites</Text>
-                <Text style={styles.detailValue}>{formatGpsValue(reading?.gps_sats, 0)}</Text>
+                <Text style={styles.detailValue}>{formatGpsValue(resolvedReading?.gps_sats, 0)}</Text>
               </View>
               <View style={styles.detailCard}>
                 <Text style={styles.detailLabel}>Speed</Text>
-                <Text style={styles.detailValue}>{formatGpsValue(reading?.gps_speed_kmh, 2)} km/h</Text>
+                <Text style={styles.detailValue}>{formatGpsValue(resolvedReading?.gps_speed_kmh, 2)} km/h</Text>
               </View>
               <View style={styles.detailCard}>
                 <Text style={styles.detailLabel}>Altitude</Text>
-                <Text style={styles.detailValue}>{formatGpsValue(reading?.gps_altitude, 2)} m</Text>
+                <Text style={styles.detailValue}>{formatGpsValue(resolvedReading?.gps_altitude, 2)} m</Text>
               </View>
               <View style={styles.detailCard}>
                 <Text style={styles.detailLabel}>Alarm</Text>
-                <Text style={styles.detailValue}>{String(Boolean(reading?.alarm))}</Text>
+                <Text style={styles.detailValue}>{String(Boolean(resolvedReading?.alarm))}</Text>
               </View>
             </View>
           </ScrollView>

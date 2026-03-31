@@ -538,6 +538,19 @@ export default function DashboardScreen() {
     [dashboardAlerts]
   );
   const latestRealtimeReading = realtimeReadings[realtimeReadings.length - 1];
+  const lastLocationReading = useMemo(
+    () =>
+      [...realtimeReadings]
+        .reverse()
+        .find(
+          (reading) =>
+            typeof reading.gps_lat === 'number' &&
+            Number.isFinite(reading.gps_lat) &&
+            typeof reading.gps_lon === 'number' &&
+            Number.isFinite(reading.gps_lon)
+        ) ?? null,
+    [realtimeReadings]
+  );
 
   const registeredVehicle = vehicles?.[0] ?? null;
   const registeredVehicleName = registeredVehicle
@@ -964,6 +977,7 @@ export default function DashboardScreen() {
         onClose={() => setIsSosModalVisible(false)}
         alert={latestSosAlert}
         reading={latestRealtimeReading ?? null}
+        fallbackLocationReading={lastLocationReading}
         deviceId={deviceStatus?.device_id ?? null}
       />
 

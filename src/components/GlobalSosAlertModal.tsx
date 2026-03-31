@@ -17,6 +17,7 @@ function isSosAlert(alert: VehicleRealtimeAlert) {
 export default function GlobalSosAlertModal() {
   const [latestSosAlert, setLatestSosAlert] = useState<VehicleRealtimeAlert | null>(null);
   const [latestRealtimeReading, setLatestRealtimeReading] = useState<VehicleRealtimeReading | null>(null);
+  const [lastLocationReading, setLastLocationReading] = useState<VehicleRealtimeReading | null>(null);
   const [deviceStatus, setDeviceStatus] = useState<VehicleRealtimeStatus | null>(null);
   const [visible, setVisible] = useState(false);
   const hasHydratedRef = useRef(false);
@@ -26,7 +27,22 @@ export default function GlobalSosAlertModal() {
     requestPermissions().catch(() => undefined);
 
     const unsubscribeReadings = subscribeToVehicleReadings((readings) => {
-      setLatestRealtimeReading(readings[readings.length - 1] ?? null);
+      const nextLatestReading = readings[readings.length - 1] ?? null;
+      const nextLocationReading =
+        [...readings]
+          .reverse()
+          .find(
+            (reading) =>
+              typeof reading.gps_lat === 'number' &&
+              Number.isFinite(reading.gps_lat) &&
+              typeof reading.gps_lon === 'number' &&
+              Number.isFinite(reading.gps_lon)
+          ) ?? null;
+
+      setLatestRealtimeReading(nextLatestReading);
+      if (nextLocationReading) {
+        setLastLocationReading(nextLocationReading);
+      }
     });
 
     const unsubscribeStatus = subscribeToVehicleStatus(setDeviceStatus);
@@ -68,6 +84,7 @@ export default function GlobalSosAlertModal() {
       onClose={() => setVisible(false)}
       alert={latestSosAlert}
       reading={latestRealtimeReading}
+      fallbackLocationReading={lastLocationReading}
       deviceId={deviceStatus?.device_id ?? null}
     />
   );

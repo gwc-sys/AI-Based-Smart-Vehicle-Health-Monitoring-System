@@ -32,13 +32,111 @@ export type VehicleRealtimeStatus = {
 export type VehicleRealtimeAlert = {
   id?: string;
   device_id?: string;
+  gps_altitude?: number;
+  gps_lat?: number;
+  gps_lon?: number;
+  gps_sats?: number;
+  gps_speed_kmh?: number;
+  latitude?: number;
+  longitude?: number;
   message?: string;
   receivedAt?: number;
+  satellites?: number;
+  speed_kmh?: number;
   timestamp?: number;
   type?: string;
 };
 
 const DATABASE_ROOT = 'Ai-based-smart-vehicle-health';
+
+function toFiniteNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+}
+
+function readNumberField(source: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = toFiniteNumber(source[key]);
+    if (typeof value === 'number') {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function hasGpsCoordinates(reading: VehicleRealtimeReading | null | undefined) {
+  return (
+    typeof reading?.gps_lat === 'number' &&
+    Number.isFinite(reading.gps_lat) &&
+    typeof reading?.gps_lon === 'number' &&
+    Number.isFinite(reading.gps_lon)
+  );
+}
+
+function normalizeVehicleReading(reading: VehicleRealtimeReading): VehicleRealtimeReading {
+  const rawReading = reading as Record<string, unknown>;
+
+  return {
+    ...reading,
+    accel_total_g: readNumberField(rawReading, 'accel_total_g'),
+    accel_x: readNumberField(rawReading, 'accel_x'),
+    accel_y: readNumberField(rawReading, 'accel_y'),
+    accel_z: readNumberField(rawReading, 'accel_z'),
+    gps_altitude: readNumberField(rawReading, 'gps_altitude', 'altitude', 'gpsAltitude'),
+    gps_lat: readNumberField(rawReading, 'gps_lat', 'latitude', 'lat', 'gpsLatitude'),
+    gps_lon: readNumberField(rawReading, 'gps_lon', 'longitude', 'lng', 'lon', 'gpsLongitude'),
+    gps_sats: readNumberField(rawReading, 'gps_sats', 'satellites', 'gpsSatellites'),
+    gps_speed_kmh: readNumberField(rawReading, 'gps_speed_kmh', 'speed', 'speed_kmh', 'gpsSpeedKmh'),
+    light: readNumberField(rawReading, 'light'),
+    sound: readNumberField(rawReading, 'sound'),
+    temperature: readNumberField(rawReading, 'temperature'),
+    timestamp: readNumberField(rawReading, 'timestamp'),
+    vibration: readNumberField(rawReading, 'vibration'),
+  };
+}
+
+function normalizeVehicleAlert(alert: VehicleRealtimeAlert): VehicleRealtimeAlert {
+  const rawAlert = alert as Record<string, unknown>;
+
+  return {
+    ...alert,
+    gps_altitude: readNumberField(rawAlert, 'gps_altitude', 'altitude', 'gpsAltitude'),
+    gps_lat: readNumberField(rawAlert, 'gps_lat', 'latitude', 'lat', 'gpsLatitude'),
+    gps_lon: readNumberField(rawAlert, 'gps_lon', 'longitude', 'lng', 'lon', 'gpsLongitude'),
+    gps_sats: readNumberField(rawAlert, 'gps_sats', 'satellites', 'gpsSatellites'),
+    gps_speed_kmh: readNumberField(rawAlert, 'gps_speed_kmh', 'speed_kmh', 'speed', 'gpsSpeedKmh'),
+    latitude: readNumberField(rawAlert, 'latitude', 'gps_lat', 'lat', 'gpsLatitude'),
+    longitude: readNumberField(rawAlert, 'longitude', 'gps_lon', 'lng', 'lon', 'gpsLongitude'),
+    satellites: readNumberField(rawAlert, 'satellites', 'gps_sats', 'gpsSatellites'),
+    speed_kmh: readNumberField(rawAlert, 'speed_kmh', 'gps_speed_kmh', 'speed', 'gpsSpeedKmh'),
+    timestamp: toFiniteNumber(alert.timestamp),
+  };
+}
+
+function normalizeVehicleStatus(status: VehicleRealtimeStatus | null): VehicleRealtimeStatus | null {
+  if (!status) {
+    return null;
+  }
+
+  return {
+    ...status,
+    timestamp: toFiniteNumber(status.timestamp),
+  };
+}
 
 function sortByTimestamp<T extends { timestamp?: number }>(items: T[]) {
   return items.sort((left, right) => (left.timestamp ?? 0) - (right.timestamp ?? 0));
@@ -53,12 +151,25 @@ export function subscribeToVehicleReadings(
   return onValue(readingsRef, (snapshot) => {
     const value = snapshot.val() as Record<string, VehicleRealtimeReading> | null;
     const receivedAt = Date.now();
-    const readings = sortByTimestamp(
+    const normalizedReadings = sortByTimestamp(
       Object.values(value ?? {}).map((reading) => ({
-        ...reading,
+        ...normalizeVehicleReading(reading),
         receivedAt,
       }))
-    ).slice(-12);
+    );
+    const recentReadings = normalizedReadings.slice(-12);
+    const latestGpsReading = [...normalizedReadings].reverse().find(hasGpsCoordinates) ?? null;
+    const readings =
+      latestGpsReading &&
+      !recentReadings.some(
+        (reading) =>
+          reading.timestamp === latestGpsReading.timestamp &&
+          reading.gps_lat === latestGpsReading.gps_lat &&
+          reading.gps_lon === latestGpsReading.gps_lon
+      )
+        ? [...recentReadings.slice(-11), latestGpsReading]
+        : recentReadings;
+
     callback(readings);
   });
 }
@@ -70,7 +181,7 @@ export function subscribeToVehicleStatus(
   const statusRef = ref(database, `${DATABASE_ROOT}/status`);
 
   return onValue(statusRef, (snapshot) => {
-    callback((snapshot.val() as VehicleRealtimeStatus | null) ?? null);
+    callback(normalizeVehicleStatus((snapshot.val() as VehicleRealtimeStatus | null) ?? null));
   });
 }
 
@@ -86,7 +197,7 @@ export function subscribeToVehicleAlerts(
       Object.entries(value ?? {}).map(([id, alert]) => ({
         id,
         receivedAt: Date.now(),
-        ...alert,
+        ...normalizeVehicleAlert(alert),
       }))
     )
       .slice(-20)
