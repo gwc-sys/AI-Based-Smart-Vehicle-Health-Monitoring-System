@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from '@/navigation/AppNavigator';
+import GlobalSosAlertModal from '@/components/GlobalSosAlertModal';
 import { AuthProvider } from '@/context/AuthContext';
 import { ThemeProvider, useAppTheme } from '@/context/ThemeContext';
 import { VehicleProvider } from '@/context/VehicleContext';
@@ -97,6 +98,7 @@ function ThemedApp() {
       <VehicleProvider>
         <NavigationContainer theme={navigationTheme}>
           <AppNavigator />
+          <GlobalSosAlertModal />
           <StatusBar style={isDarkMode ? 'light' : 'dark'} />
         </NavigationContainer>
       </VehicleProvider>

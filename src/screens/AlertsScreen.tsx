@@ -1,6 +1,5 @@
 import AppIcon from '@/components/AppIcon';
 import { useAppTheme } from '@/context/ThemeContext';
-import { requestPermissions, sendImmediateNotification } from '@/services/notificationService';
 import { subscribeToVehicleAlerts, VehicleRealtimeAlert } from '@/services/vehicleRealtimeService';
 import React, { useEffect, useState } from 'react';
 import {
@@ -64,26 +63,8 @@ export default function AlertsScreen() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
 
   useEffect(() => {
-    let previousTopAlertId: string | null = null;
-    let hasLoadedInitialSnapshot = false;
-
-    requestPermissions().catch(() => undefined);
-
     const unsubscribe = subscribeToVehicleAlerts((realtimeAlerts) => {
       const nextAlerts = realtimeAlerts.map(mapRealtimeAlert);
-      const latestAlert = nextAlerts[0];
-
-      if (
-        hasLoadedInitialSnapshot &&
-        latestAlert &&
-        latestAlert.type === 'sos' &&
-        latestAlert.id !== previousTopAlertId
-      ) {
-        sendImmediateNotification('SOS Alert', latestAlert.message).catch(() => undefined);
-      }
-
-      previousTopAlertId = latestAlert?.id ?? null;
-      hasLoadedInitialSnapshot = true;
       setAlerts((currentAlerts) =>
         nextAlerts.map((nextAlert) => {
           const existing = currentAlerts.find((item) => item.id === nextAlert.id);

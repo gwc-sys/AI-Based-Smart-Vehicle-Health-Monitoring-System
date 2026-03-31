@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppTheme } from '@/context/ThemeContext';
 import SensorCard from '@/components/SensorCard';
+import SosAlertModal from '@/components/SosAlertModal';
 import useAuth from '@/hooks/useAuth';
 import { useVehicleData } from '@/hooks/useVehicleData';
 import {
@@ -443,10 +444,6 @@ function buildChartSeries(points: SensorHistoryPoint[]) {
   };
 }
 
-function formatRealtimeAlertTimestamp(timestamp?: number, receivedAt?: number) {
-  return formatLiveTimestamp(timestamp, receivedAt);
-}
-
 function mapDashboardAlert(alert: VehicleRealtimeAlert): DashboardRealtimeAlert {
   const normalizedType = String(alert.type ?? 'info').toLowerCase();
   const level =
@@ -475,10 +472,6 @@ function mapDashboardAlert(alert: VehicleRealtimeAlert): DashboardRealtimeAlert 
   };
 }
 
-function formatGpsValue(value: number | undefined, digits: number) {
-  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : '--';
-}
-
 export default function DashboardScreen() {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
@@ -492,8 +485,6 @@ export default function DashboardScreen() {
   const [selectedSensorId, setSelectedSensorId] = useState<(typeof SENSOR_ORDER)[number]>('accelerometer');
   const [isSensorModalVisible, setIsSensorModalVisible] = useState(false);
   const [isSosModalVisible, setIsSosModalVisible] = useState(false);
-  const [hasHydratedSos, setHasHydratedSos] = useState(false);
-  const [lastOpenedSosId, setLastOpenedSosId] = useState<string | null>(null);
   const [maintenanceEntries, setMaintenanceEntries] = useState<MaintenanceRecord[]>(defaultMaintenanceRecords);
   const [isMaintenanceModalVisible, setIsMaintenanceModalVisible] = useState(false);
   const [maintenanceForm, setMaintenanceForm] = useState<MaintenanceFormState>({
@@ -547,19 +538,6 @@ export default function DashboardScreen() {
     [dashboardAlerts]
   );
   const latestRealtimeReading = realtimeReadings[realtimeReadings.length - 1];
-
-  useEffect(() => {
-    if (!hasHydratedSos) {
-      setLastOpenedSosId(latestSosAlert?.id ?? null);
-      setHasHydratedSos(true);
-      return;
-    }
-
-    if (latestSosAlert?.id && latestSosAlert.id !== lastOpenedSosId) {
-      setIsSosModalVisible(true);
-      setLastOpenedSosId(latestSosAlert.id);
-    }
-  }, [hasHydratedSos, lastOpenedSosId, latestSosAlert?.id]);
 
   const registeredVehicle = vehicles?.[0] ?? null;
   const registeredVehicleName = registeredVehicle
@@ -981,96 +959,13 @@ export default function DashboardScreen() {
         </View>
       </Modal>
 
-      <Modal
+      <SosAlertModal
         visible={isSosModalVisible && Boolean(latestSosAlert)}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setIsSosModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.sosModalEyebrow}>Emergency Alert</Text>
-                <Text style={styles.modalTitle}>SOS Emergency</Text>
-                <Text style={styles.modalSubtitle}>
-                  {latestSosAlert?.message ?? 'SOS button pressed by user'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setIsSosModalVisible(false)}
-              >
-                <Text style={styles.modalCloseText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.detailStatsRow}>
-                <View style={styles.detailStatBox}>
-                  <Text style={styles.detailStatLabel}>Current</Text>
-                  <Text style={styles.detailStatValue}>SOS</Text>
-                </View>
-                <View style={styles.detailStatBox}>
-                  <Text style={styles.detailStatLabel}>Last Updated</Text>
-                  <Text style={styles.detailStatValueSmall}>
-                    {formatRealtimeAlertTimestamp(
-                      latestSosAlert?.timestamp,
-                      latestSosAlert?.receivedAt
-                    )}
-                  </Text>
-                </View>
-                <View style={styles.detailStatBox}>
-                  <Text style={styles.detailStatLabel}>Alarm</Text>
-                  <Text style={styles.detailStatValue}>
-                    {String(Boolean(latestRealtimeReading?.alarm))}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.historyHeader}>
-                <Text style={styles.historyTitle}>Live Emergency Details</Text>
-                <Text style={styles.historyHint}>
-                  {latestSosAlert?.deviceId ?? 'Unknown device'}
-                </Text>
-              </View>
-
-              <View style={styles.sosDetailGrid}>
-                <View style={styles.sosDetailCard}>
-                  <Text style={styles.sosDetailLabel}>Latitude</Text>
-                  <Text style={styles.sosDetailValue}>
-                    {formatGpsValue(latestRealtimeReading?.gps_lat, 6)}
-                  </Text>
-                </View>
-                <View style={styles.sosDetailCard}>
-                  <Text style={styles.sosDetailLabel}>Longitude</Text>
-                  <Text style={styles.sosDetailValue}>
-                    {formatGpsValue(latestRealtimeReading?.gps_lon, 6)}
-                  </Text>
-                </View>
-                <View style={styles.sosDetailCard}>
-                  <Text style={styles.sosDetailLabel}>Satellites</Text>
-                  <Text style={styles.sosDetailValue}>
-                    {formatGpsValue(latestRealtimeReading?.gps_sats, 0)}
-                  </Text>
-                </View>
-                <View style={styles.sosDetailCard}>
-                  <Text style={styles.sosDetailLabel}>Speed</Text>
-                  <Text style={styles.sosDetailValue}>
-                    {formatGpsValue(latestRealtimeReading?.gps_speed_kmh, 2)} km/h
-                  </Text>
-                </View>
-                <View style={styles.sosDetailCard}>
-                  <Text style={styles.sosDetailLabel}>Altitude</Text>
-                  <Text style={styles.sosDetailValue}>
-                    {formatGpsValue(latestRealtimeReading?.gps_altitude, 2)} m
-                  </Text>
-                </View>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setIsSosModalVisible(false)}
+        alert={latestSosAlert}
+        reading={latestRealtimeReading ?? null}
+        deviceId={deviceStatus?.device_id ?? null}
+      />
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
@@ -1680,41 +1575,6 @@ const createStyles = (colors: any) =>
       paddingHorizontal: 14,
       paddingVertical: 8,
       borderRadius: 999,
-    },
-    sosModalEyebrow: {
-      fontSize: 11,
-      color: '#FF8A80',
-      fontWeight: '700',
-      textTransform: 'uppercase',
-      letterSpacing: 0.6,
-      marginTop: 6,
-      marginBottom: 6,
-    },
-    sosDetailGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      justifyContent: 'space-between',
-      marginTop: 12,
-    },
-    sosDetailCard: {
-      width: '48%',
-      backgroundColor: colors.mutedSurface,
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
-      marginBottom: 8,
-    },
-    sosDetailLabel: {
-      fontSize: 11,
-      color: colors.icon,
-      marginBottom: 6,
-    },
-    sosDetailValue: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.text,
     },
     section: {
       marginBottom: 24,
