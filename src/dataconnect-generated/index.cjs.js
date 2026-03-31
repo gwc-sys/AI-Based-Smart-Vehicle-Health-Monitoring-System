@@ -1,4 +1,4 @@
-const { queryRef, executeQuery, mutationRef, executeMutation, validateArgs } = require('firebase/data-connect');
+const { queryRef, executeQuery, validateArgsWithOptions, mutationRef, executeMutation, validateArgs } = require('firebase/data-connect');
 
 const connectorConfig = {
   connector: 'example',
@@ -15,9 +15,12 @@ const listCategoriesRef = (dc) => {
 listCategoriesRef.operationName = 'ListCategories';
 exports.listCategoriesRef = listCategoriesRef;
 
-exports.listCategories = function listCategories(dc) {
-  return executeQuery(listCategoriesRef(dc));
-};
+exports.listCategories = function listCategories(dcOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrOptions, options, undefined,false, false);
+  return executeQuery(listCategoriesRef(dcInstance, inputVars), inputOpts && inputOpts.fetchPolicy);
+}
+;
 
 const myNotesRef = (dc) => {
   const { dc: dcInstance} = validateArgs(connectorConfig, dc, undefined);
@@ -27,9 +30,12 @@ const myNotesRef = (dc) => {
 myNotesRef.operationName = 'MyNotes';
 exports.myNotesRef = myNotesRef;
 
-exports.myNotes = function myNotes(dc) {
-  return executeQuery(myNotesRef(dc));
-};
+exports.myNotes = function myNotes(dcOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrOptions, options, undefined,false, false);
+  return executeQuery(myNotesRef(dcInstance, inputVars), inputOpts && inputOpts.fetchPolicy);
+}
+;
 
 const createUserNoteRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
@@ -40,8 +46,10 @@ createUserNoteRef.operationName = 'CreateUserNote';
 exports.createUserNoteRef = createUserNoteRef;
 
 exports.createUserNote = function createUserNote(dcOrVars, vars) {
-  return executeMutation(createUserNoteRef(dcOrVars, vars));
-};
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(createUserNoteRef(dcInstance, inputVars));
+}
+;
 
 const updateMyDisplayNameRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
@@ -52,5 +60,7 @@ updateMyDisplayNameRef.operationName = 'UpdateMyDisplayName';
 exports.updateMyDisplayNameRef = updateMyDisplayNameRef;
 
 exports.updateMyDisplayName = function updateMyDisplayName(dcOrVars, vars) {
-  return executeMutation(updateMyDisplayNameRef(dcOrVars, vars));
-};
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(updateMyDisplayNameRef(dcInstance, inputVars));
+}
+;

@@ -1,4 +1,4 @@
-import { ConnectorConfig, DataConnect, QueryRef, QueryPromise, MutationRef, MutationPromise } from 'firebase/data-connect';
+import { ConnectorConfig, DataConnect, QueryRef, QueryPromise, ExecuteQueryOptions, MutationRef, MutationPromise } from 'firebase/data-connect';
 
 export const connectorConfig: ConnectorConfig;
 
@@ -74,8 +74,8 @@ interface ListCategoriesRef {
 }
 export const listCategoriesRef: ListCategoriesRef;
 
-export function listCategories(): QueryPromise<ListCategoriesData, undefined>;
-export function listCategories(dc: DataConnect): QueryPromise<ListCategoriesData, undefined>;
+export function listCategories(options?: ExecuteQueryOptions): QueryPromise<ListCategoriesData, undefined>;
+export function listCategories(dc: DataConnect, options?: ExecuteQueryOptions): QueryPromise<ListCategoriesData, undefined>;
 
 interface MyNotesRef {
   /* Allow users to create refs without passing in DataConnect */
@@ -86,8 +86,8 @@ interface MyNotesRef {
 }
 export const myNotesRef: MyNotesRef;
 
-export function myNotes(): QueryPromise<MyNotesData, undefined>;
-export function myNotes(dc: DataConnect): QueryPromise<MyNotesData, undefined>;
+export function myNotes(options?: ExecuteQueryOptions): QueryPromise<MyNotesData, undefined>;
+export function myNotes(dc: DataConnect, options?: ExecuteQueryOptions): QueryPromise<MyNotesData, undefined>;
 
 interface CreateUserNoteRef {
   /* Allow users to create refs without passing in DataConnect */

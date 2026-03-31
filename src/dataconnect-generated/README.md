@@ -64,7 +64,7 @@ Below are examples of how to use the `example` connector's generated functions t
 ## ListCategories
 You can execute the `ListCategories` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-listCategories(): QueryPromise<ListCategoriesData, undefined>;
+listCategories(options?: ExecuteQueryOptions): QueryPromise<ListCategoriesData, undefined>;
 
 interface ListCategoriesRef {
   ...
@@ -75,7 +75,7 @@ export const listCategoriesRef: ListCategoriesRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
 ```typescript
-listCategories(dc: DataConnect): QueryPromise<ListCategoriesData, undefined>;
+listCategories(dc: DataConnect, options?: ExecuteQueryOptions): QueryPromise<ListCategoriesData, undefined>;
 
 interface ListCategoriesRef {
   ...
@@ -159,7 +159,7 @@ executeQuery(ref).then((response) => {
 ## MyNotes
 You can execute the `MyNotes` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [dataconnect-generated/index.d.ts](./index.d.ts):
 ```typescript
-myNotes(): QueryPromise<MyNotesData, undefined>;
+myNotes(options?: ExecuteQueryOptions): QueryPromise<MyNotesData, undefined>;
 
 interface MyNotesRef {
   ...
@@ -170,7 +170,7 @@ export const myNotesRef: MyNotesRef;
 ```
 You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
 ```typescript
-myNotes(dc: DataConnect): QueryPromise<MyNotesData, undefined>;
+myNotes(dc: DataConnect, options?: ExecuteQueryOptions): QueryPromise<MyNotesData, undefined>;
 
 interface MyNotesRef {
   ...

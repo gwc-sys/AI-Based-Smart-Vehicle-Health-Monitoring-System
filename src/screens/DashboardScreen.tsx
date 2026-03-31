@@ -3,6 +3,14 @@ import { useAppTheme } from '@/context/ThemeContext';
 import SensorCard from '@/components/SensorCard';
 import useAuth from '@/hooks/useAuth';
 import { useVehicleData } from '@/hooks/useVehicleData';
+import {
+  subscribeToVehicleAlerts,
+  subscribeToVehicleReadings,
+  subscribeToVehicleStatus,
+  VehicleRealtimeAlert,
+  VehicleRealtimeReading,
+  VehicleRealtimeStatus,
+} from '@/services/vehicleRealtimeService';
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -27,7 +35,7 @@ type SensorHistoryPoint = {
 };
 
 type DashboardSensor = {
-  id: string;
+  id: (typeof SENSOR_ORDER)[number];
   title: string;
   shortLabel: string;
   unit: string;
@@ -40,6 +48,17 @@ type DashboardSensor = {
   lastUpdated: string;
   threshold: string;
   history: SensorHistoryPoint[];
+};
+
+type DashboardRealtimeAlert = {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  deviceId: string;
+  receivedAt?: number;
+  timestamp?: number;
+  level: 'info' | 'warning' | 'critical';
 };
 
 type MaintenanceRecord = {
@@ -62,262 +81,403 @@ type MaintenanceFormState = {
   status: MaintenanceRecord['status'];
 };
 
-const sensorReadings: DashboardSensor[] = [
-  {
-    id: 'accelerometer',
-    title: '3-Axis Accelerometer',
-    shortLabel: 'Accel',
-    unit: 'g',
-    value: '0.82 g',
-    subtitle: 'Tilt and impact within safe range',
-    status: 'normal',
-    accentColor: '#48B6A3',
-    chartValue: 82,
-    metricLabel: 'Motion balance',
-    lastUpdated: '2 min ago',
-    threshold: 'Alert above 1.20 g',
-    history: [
-      { time: '08:00', value: 0.61, displayValue: '0.61 g' },
-      { time: '09:00', value: 0.68, displayValue: '0.68 g' },
-      { time: '10:00', value: 0.74, displayValue: '0.74 g' },
-      { time: '11:00', value: 0.82, displayValue: '0.82 g' },
-      { time: '12:00', value: 0.77, displayValue: '0.77 g' },
-      { time: '13:00', value: 0.82, displayValue: '0.82 g' },
-    ],
-  },
-  {
-    id: 'vibration',
-    title: 'Vibration Sensor',
-    shortLabel: 'Vib',
-    unit: 'Hz',
-    value: '4.3 Hz',
-    subtitle: 'Stable chassis vibration detected',
-    status: 'normal',
-    accentColor: '#2FA8CC',
-    chartValue: 76,
-    metricLabel: 'Vibration level',
-    lastUpdated: '1 min ago',
-    threshold: 'Alert above 7.00 Hz',
-    history: [
-      { time: '08:00', value: 3.4, displayValue: '3.4 Hz' },
-      { time: '09:00', value: 3.7, displayValue: '3.7 Hz' },
-      { time: '10:00', value: 4.0, displayValue: '4.0 Hz' },
-      { time: '11:00', value: 4.6, displayValue: '4.6 Hz' },
-      { time: '12:00', value: 4.1, displayValue: '4.1 Hz' },
-      { time: '13:00', value: 4.3, displayValue: '4.3 Hz' },
-    ],
-  },
-  {
-    id: 'sound',
-    title: 'Sound Sensor',
-    shortLabel: 'Sound',
-    unit: 'dB',
-    value: '61 dB',
-    subtitle: 'Engine noise is slightly elevated',
-    status: 'warning',
-    accentColor: '#6E9CFF',
-    chartValue: 61,
-    metricLabel: 'Noise intensity',
-    lastUpdated: 'Just now',
-    threshold: 'Alert above 65 dB',
-    history: [
-      { time: '08:00', value: 51, displayValue: '51 dB' },
-      { time: '09:00', value: 54, displayValue: '54 dB' },
-      { time: '10:00', value: 57, displayValue: '57 dB' },
-      { time: '11:00', value: 63, displayValue: '63 dB' },
-      { time: '12:00', value: 59, displayValue: '59 dB' },
-      { time: '13:00', value: 61, displayValue: '61 dB' },
-    ],
-  },
-  {
-    id: 'light',
-    title: 'Light Sensor',
-    shortLabel: 'Light',
-    unit: 'lux',
-    value: '420 lux',
-    subtitle: 'Cabin lighting and ambient light normal',
-    status: 'normal',
-    accentColor: '#8C7CF6',
-    chartValue: 84,
-    metricLabel: 'Ambient light',
-    lastUpdated: '2 min ago',
-    threshold: 'Alert below 120 lux',
-    history: [
-      { time: '08:00', value: 310, displayValue: '310 lux' },
-      { time: '09:00', value: 355, displayValue: '355 lux' },
-      { time: '10:00', value: 398, displayValue: '398 lux' },
-      { time: '11:00', value: 420, displayValue: '420 lux' },
-      { time: '12:00', value: 405, displayValue: '405 lux' },
-      { time: '13:00', value: 420, displayValue: '420 lux' },
-    ],
-  },
-  {
-    id: 'temperature',
-    title: 'Temperature Sensor',
-    shortLabel: 'Temp',
-    unit: 'C',
-    value: '36.4 C',
-    subtitle: 'Thermal condition under threshold',
-    status: 'normal',
-    accentColor: '#3BB273',
-    chartValue: 73,
-    metricLabel: 'Engine temperature',
-    lastUpdated: '1 min ago',
-    threshold: 'Alert above 45 C',
-    history: [
-      { time: '08:00', value: 31.2, displayValue: '31.2 C' },
-      { time: '09:00', value: 32.5, displayValue: '32.5 C' },
-      { time: '10:00', value: 34.4, displayValue: '34.4 C' },
-      { time: '11:00', value: 35.8, displayValue: '35.8 C' },
-      { time: '12:00', value: 36.1, displayValue: '36.1 C' },
-      { time: '13:00', value: 36.4, displayValue: '36.4 C' },
-    ],
-  },
-  {
-    id: 'battery',
-    title: 'Battery Voltage Sensor',
-    shortLabel: 'Batt',
-    unit: 'V',
-    value: '12.6 V',
-    subtitle: 'Battery supply is healthy',
-    status: 'normal',
-    accentColor: '#F4B740',
-    chartValue: 88,
-    metricLabel: 'Battery health',
-    lastUpdated: '3 min ago',
-    threshold: 'Alert below 11.5 V',
-    history: [
-      { time: '08:00', value: 12.3, displayValue: '12.3 V' },
-      { time: '09:00', value: 12.4, displayValue: '12.4 V' },
-      { time: '10:00', value: 12.4, displayValue: '12.4 V' },
-      { time: '11:00', value: 12.5, displayValue: '12.5 V' },
-      { time: '12:00', value: 12.6, displayValue: '12.6 V' },
-      { time: '13:00', value: 12.6, displayValue: '12.6 V' },
-    ],
-  },
-  {
-    id: 'weight',
-    title: 'Over-Weight Sensor',
-    shortLabel: 'Load',
-    unit: '%',
-    value: '78%',
-    subtitle: 'Vehicle load is approaching limit',
-    status: 'warning',
-    accentColor: '#F05D5E',
-    chartValue: 78,
-    metricLabel: 'Load utilization',
-    lastUpdated: '1 min ago',
-    threshold: 'Alert above 85%',
-    history: [
-      { time: '08:00', value: 52, displayValue: '52%' },
-      { time: '09:00', value: 58, displayValue: '58%' },
-      { time: '10:00', value: 66, displayValue: '66%' },
-      { time: '11:00', value: 71, displayValue: '71%' },
-      { time: '12:00', value: 76, displayValue: '76%' },
-      { time: '13:00', value: 78, displayValue: '78%' },
-    ],
-  },
-  {
-    id: 'fuel-a',
-    title: 'Fuel Flow Sensor A',
-    shortLabel: 'Fuel A',
-    unit: 'L/min',
-    value: '2.8 L/min',
-    subtitle: 'Fuel intake flow is balanced',
-    status: 'normal',
-    accentColor: '#7D5FD6',
-    chartValue: 67,
-    metricLabel: 'Fuel input flow',
-    lastUpdated: '2 min ago',
-    threshold: 'Alert below 1.80 L/min',
-    history: [
-      { time: '08:00', value: 2.1, displayValue: '2.1 L/min' },
-      { time: '09:00', value: 2.3, displayValue: '2.3 L/min' },
-      { time: '10:00', value: 2.4, displayValue: '2.4 L/min' },
-      { time: '11:00', value: 2.6, displayValue: '2.6 L/min' },
-      { time: '12:00', value: 2.7, displayValue: '2.7 L/min' },
-      { time: '13:00', value: 2.8, displayValue: '2.8 L/min' },
-    ],
-  },
-  {
-    id: 'fuel-b',
-    title: 'Fuel Flow Sensor B',
-    shortLabel: 'Fuel B',
-    unit: 'L/min',
-    value: '2.4 L/min',
-    subtitle: 'Return flow shows no leakage',
-    status: 'normal',
-    accentColor: '#5567D9',
-    chartValue: 64,
-    metricLabel: 'Fuel return flow',
-    lastUpdated: '2 min ago',
-    threshold: 'Alert above 3.20 L/min',
-    history: [
-      { time: '08:00', value: 2.0, displayValue: '2.0 L/min' },
-      { time: '09:00', value: 2.1, displayValue: '2.1 L/min' },
-      { time: '10:00', value: 2.2, displayValue: '2.2 L/min' },
-      { time: '11:00', value: 2.3, displayValue: '2.3 L/min' },
-      { time: '12:00', value: 2.4, displayValue: '2.4 L/min' },
-      { time: '13:00', value: 2.4, displayValue: '2.4 L/min' },
-    ],
-  },
-  {
-    id: 'gps',
-    title: 'NEO-6M GPS Module',
-    shortLabel: 'GPS',
-    unit: 'sat',
-    value: 'Locked',
-    subtitle: 'Lat 12.9716, Lon 77.5946',
-    status: 'normal',
-    accentColor: '#43B39D',
-    chartValue: 92,
-    metricLabel: 'Satellite lock strength',
-    lastUpdated: 'Just now',
-    threshold: 'Alert below 4 satellites',
-    history: [
-      { time: '08:00', value: 5, displayValue: '5 satellites' },
-      { time: '09:00', value: 6, displayValue: '6 satellites' },
-      { time: '10:00', value: 7, displayValue: '7 satellites' },
-      { time: '11:00', value: 8, displayValue: '8 satellites' },
-      { time: '12:00', value: 8, displayValue: '8 satellites' },
-      { time: '13:00', value: 9, displayValue: '9 satellites' },
-    ],
-  },
-  {
-    id: 'sos',
-    title: 'SOS Button',
-    shortLabel: 'SOS',
-    unit: 'state',
-    value: 'Standby',
-    subtitle: 'Emergency trigger is armed',
-    status: 'inactive',
-    accentColor: '#EF6A4C',
-    chartValue: 40,
-    metricLabel: 'Trigger readiness',
-    lastUpdated: '5 min ago',
-    threshold: 'Alert when button is pressed',
-    history: [
-      { time: '08:00', value: 1, displayValue: 'Armed' },
-      { time: '09:00', value: 1, displayValue: 'Armed' },
-      { time: '10:00', value: 1, displayValue: 'Armed' },
-      { time: '11:00', value: 1, displayValue: 'Armed' },
-      { time: '12:00', value: 1, displayValue: 'Armed' },
-      { time: '13:00', value: 1, displayValue: 'Standby' },
-    ],
-  },
-];
+const SENSOR_ORDER = [
+  'accelerometer',
+  'accel-x',
+  'accel-y',
+  'accel-z',
+  'vibration',
+  'sound',
+  'light',
+  'temperature',
+  'motion',
+  'tilt',
+  'accident',
+  'alarm',
+] as const;
 
-const defaultMaintenanceRecords: MaintenanceRecord[] = [
-  {
-    id: 'maint-1',
-    vehicleName: 'Pulsar NS 200',
-    maintenanceType: 'Preventive Service',
-    workDone: 'Engine diagnostics, brake cleaning, software reset',
-    maintenanceDate: '2026-03-18',
-    nextServiceDate: '2026-06-18',
-    status: 'completed',
-  },
-];
+const defaultMaintenanceRecords: MaintenanceRecord[] = [];
+
+function formatReadingLabel(timestamp: number | undefined, fallbackIndex: number) {
+  if (typeof timestamp === 'number') {
+    return `T${timestamp}`;
+  }
+
+  return `#${fallbackIndex + 1}`;
+}
+
+function formatLiveTimestamp(timestamp?: number, receivedAt?: number) {
+  const sourceTime =
+    typeof timestamp === 'number' && timestamp > 1000000000 ? timestamp : receivedAt;
+
+  if (typeof sourceTime !== 'number') {
+    return 'Waiting';
+  }
+
+  const diffMs = Date.now() - sourceTime;
+  const diffSeconds = Math.max(0, Math.floor(diffMs / 1000));
+
+  if (diffSeconds < 5) {
+    return 'just now';
+  }
+
+  if (diffSeconds < 60) {
+    return `${diffSeconds} sec ago`;
+  }
+
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) {
+    return `${diffMinutes} min ago`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours} hr ago`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+}
+
+function toNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function toPercent(value: number, max: number) {
+  if (max <= 0) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(100, Math.round((value / max) * 100)));
+}
+
+function buildNumericHistory(
+  readings: VehicleRealtimeReading[],
+  selector: (reading: VehicleRealtimeReading) => number,
+  unit: string,
+  digits: number = 0
+): SensorHistoryPoint[] {
+  return readings.map((reading, index) => {
+    const value = selector(reading);
+    return {
+      time: formatReadingLabel(reading.timestamp, index),
+      value,
+      displayValue: `${value.toFixed(digits)} ${unit}`.trim(),
+    };
+  });
+}
+
+function buildBooleanHistory(
+  readings: VehicleRealtimeReading[],
+  selector: (reading: VehicleRealtimeReading) => boolean,
+  activeLabel: string,
+  inactiveLabel: string
+): SensorHistoryPoint[] {
+  return readings.map((reading, index) => {
+    const enabled = selector(reading);
+    return {
+      time: formatReadingLabel(reading.timestamp, index),
+      value: enabled ? 100 : 0,
+      displayValue: enabled ? activeLabel : inactiveLabel,
+    };
+  });
+}
+
+function createSensorReadings(
+  readings: VehicleRealtimeReading[],
+  alerts: VehicleRealtimeAlert[]
+): DashboardSensor[] {
+  const latest = readings[readings.length - 1];
+  const lastUpdated = formatLiveTimestamp(latest?.timestamp, latest?.receivedAt);
+  const hasData = Boolean(latest);
+
+  const createNumericSensor = ({
+    id,
+    title,
+    shortLabel,
+    unit,
+    accentColor,
+    metricLabel,
+    threshold,
+    value,
+    history,
+    status,
+    subtitle,
+    maxChartValue,
+    digits = 0,
+  }: {
+    id: (typeof SENSOR_ORDER)[number];
+    title: string;
+    shortLabel: string;
+    unit: string;
+    accentColor: string;
+    metricLabel: string;
+    threshold: string;
+    value: number;
+    history: SensorHistoryPoint[];
+    status: SensorStatus;
+    subtitle: string;
+    maxChartValue: number;
+    digits?: number;
+  }): DashboardSensor => ({
+    id,
+    title,
+    shortLabel,
+    unit,
+    value: hasData ? `${value.toFixed(digits)} ${unit}`.trim() : '--',
+    subtitle: hasData ? subtitle : 'Waiting for realtime database values',
+    status: hasData ? status : 'inactive',
+    accentColor,
+    chartValue: hasData ? toPercent(value, maxChartValue) : 0,
+    metricLabel,
+    lastUpdated,
+    threshold,
+    history,
+  });
+
+  const accelValue = toNumber(latest?.accel_total_g);
+  const accelXValue = toNumber(latest?.accel_x);
+  const accelYValue = toNumber(latest?.accel_y);
+  const accelZValue = toNumber(latest?.accel_z);
+  const vibrationValue = toNumber(latest?.vibration);
+  const soundValue = toNumber(latest?.sound);
+  const lightValue = toNumber(latest?.light);
+  const temperatureValue = toNumber(latest?.temperature);
+  const motionActive = Boolean(latest?.motion_detected);
+  const tiltActive = Boolean(latest?.tilt_detected);
+  const accidentActive = Boolean(latest?.accident_detected);
+  const alarmActive = Boolean(latest?.alarm);
+
+  return [
+    createNumericSensor({
+      id: 'accelerometer',
+      title: 'accel_total_g',
+      shortLabel: 'Total G',
+      unit: 'g',
+      accentColor: '#48B6A3',
+      metricLabel: 'Total acceleration',
+      threshold: 'Alert above 1.20 g',
+      value: accelValue,
+      history: buildNumericHistory(readings, (reading) => toNumber(reading.accel_total_g), 'g', 2),
+      status: accelValue > 1.2 ? 'critical' : accelValue > 0.6 ? 'warning' : 'normal',
+      subtitle: 'Direct value from readings.accel_total_g',
+      maxChartValue: 1.2,
+      digits: 2,
+    }),
+    createNumericSensor({
+      id: 'accel-x',
+      title: 'accel_x',
+      shortLabel: 'Accel X',
+      unit: 'g',
+      accentColor: '#2FA8CC',
+      metricLabel: 'Acceleration X',
+      threshold: 'Live axis reading',
+      value: accelXValue,
+      history: buildNumericHistory(readings, (reading) => toNumber(reading.accel_x), 'g', 2),
+      status: Math.abs(accelXValue) > 1 ? 'warning' : 'normal',
+      subtitle: 'Direct value from readings.accel_x',
+      maxChartValue: 1.5,
+      digits: 2,
+    }),
+    createNumericSensor({
+      id: 'accel-y',
+      title: 'accel_y',
+      shortLabel: 'Accel Y',
+      unit: 'g',
+      accentColor: '#6E9CFF',
+      metricLabel: 'Acceleration Y',
+      threshold: 'Live axis reading',
+      value: accelYValue,
+      history: buildNumericHistory(readings, (reading) => toNumber(reading.accel_y), 'g', 2),
+      status: Math.abs(accelYValue) > 1 ? 'warning' : 'normal',
+      subtitle: 'Direct value from readings.accel_y',
+      maxChartValue: 1.5,
+      digits: 2,
+    }),
+    createNumericSensor({
+      id: 'accel-z',
+      title: 'accel_z',
+      shortLabel: 'Accel Z',
+      unit: 'g',
+      accentColor: '#8C7CF6',
+      metricLabel: 'Acceleration Z',
+      threshold: 'Live axis reading',
+      value: accelZValue,
+      history: buildNumericHistory(readings, (reading) => toNumber(reading.accel_z), 'g', 2),
+      status: Math.abs(accelZValue) > 1 ? 'warning' : 'normal',
+      subtitle: 'Direct value from readings.accel_z',
+      maxChartValue: 1.5,
+      digits: 2,
+    }),
+    createNumericSensor({
+      id: 'vibration',
+      title: 'vibration',
+      shortLabel: 'Vibration',
+      unit: 'raw',
+      accentColor: '#43B39D',
+      metricLabel: 'Vibration',
+      threshold: 'Direct sensor reading',
+      value: vibrationValue,
+      history: buildNumericHistory(readings, (reading) => toNumber(reading.vibration), 'raw'),
+      status: vibrationValue > 100 ? 'critical' : vibrationValue > 30 ? 'warning' : 'normal',
+      subtitle: 'Direct value from readings.vibration',
+      maxChartValue: 150,
+    }),
+    createNumericSensor({
+      id: 'sound',
+      title: 'sound',
+      shortLabel: 'Sound',
+      unit: 'raw',
+      accentColor: '#F4B740',
+      metricLabel: 'Sound',
+      threshold: 'Direct sensor reading',
+      value: soundValue,
+      history: buildNumericHistory(readings, (reading) => toNumber(reading.sound), 'raw'),
+      status: soundValue > 3000 ? 'critical' : soundValue > 1800 ? 'warning' : 'normal',
+      subtitle: 'Direct value from readings.sound',
+      maxChartValue: 4000,
+    }),
+    createNumericSensor({
+      id: 'light',
+      title: 'light',
+      shortLabel: 'Light',
+      unit: 'raw',
+      accentColor: '#F05D5E',
+      metricLabel: 'Light',
+      threshold: 'Direct sensor reading',
+      value: lightValue,
+      history: buildNumericHistory(readings, (reading) => toNumber(reading.light), 'raw'),
+      status: lightValue < 30 ? 'critical' : lightValue < 100 ? 'warning' : 'normal',
+      subtitle: 'Direct value from readings.light',
+      maxChartValue: 800,
+    }),
+    createNumericSensor({
+      id: 'temperature',
+      title: 'temperature',
+      shortLabel: 'Temp',
+      unit: 'C',
+      accentColor: '#3BB273',
+      metricLabel: 'Temperature',
+      threshold: 'Direct sensor reading',
+      value: temperatureValue,
+      history: buildNumericHistory(readings, (reading) => toNumber(reading.temperature), 'C', 1),
+      status: temperatureValue > 90 ? 'critical' : temperatureValue > 60 ? 'warning' : 'normal',
+      subtitle: 'Direct value from readings.temperature',
+      maxChartValue: 100,
+      digits: 1,
+    }),
+    {
+      id: 'motion',
+      title: 'motion_detected',
+      shortLabel: 'Motion',
+      unit: 'state',
+      value: hasData ? String(motionActive) : '--',
+      subtitle: hasData ? 'Direct value from readings.motion_detected' : 'Waiting for realtime database values',
+      status: hasData ? (motionActive ? 'warning' : 'normal') : 'inactive',
+      accentColor: '#F4B740',
+      chartValue: hasData ? (motionActive ? 100 : 0) : 0,
+      metricLabel: 'Motion detected',
+      lastUpdated,
+      threshold: 'Boolean value',
+      history: buildBooleanHistory(readings, (reading) => Boolean(reading.motion_detected), 'true', 'false'),
+    },
+    {
+      id: 'tilt',
+      title: 'tilt_detected',
+      shortLabel: 'Tilt',
+      unit: 'state',
+      value: hasData ? String(tiltActive) : '--',
+      subtitle: hasData ? 'Direct value from readings.tilt_detected' : 'Waiting for realtime database values',
+      status: hasData ? (tiltActive ? 'critical' : 'normal') : 'inactive',
+      accentColor: '#5567D9',
+      chartValue: hasData ? (tiltActive ? 100 : 0) : 0,
+      metricLabel: 'Tilt detected',
+      lastUpdated,
+      threshold: 'Boolean value',
+      history: buildBooleanHistory(readings, (reading) => Boolean(reading.tilt_detected), 'true', 'false'),
+    },
+    {
+      id: 'accident',
+      title: 'accident_detected',
+      shortLabel: 'Accident',
+      unit: 'state',
+      value: hasData ? String(accidentActive) : '--',
+      subtitle: hasData ? 'Direct value from readings.accident_detected' : 'Waiting for realtime database values',
+      status: hasData ? (accidentActive ? 'critical' : 'normal') : 'inactive',
+      accentColor: '#D84C4C',
+      chartValue: hasData ? (accidentActive ? 100 : 0) : 0,
+      metricLabel: 'Accident detected',
+      lastUpdated,
+      threshold: 'Boolean value',
+      history: buildBooleanHistory(readings, (reading) => Boolean(reading.accident_detected), 'true', 'false'),
+    },
+    {
+      id: 'alarm',
+      title: 'alarm',
+      shortLabel: 'Alarm',
+      unit: 'state',
+      value: hasData ? String(alarmActive) : '--',
+      subtitle: hasData ? 'Direct value from readings.alarm' : 'Waiting for realtime database values',
+      status: hasData ? (alarmActive ? 'critical' : 'inactive') : 'inactive',
+      accentColor: '#EF6A4C',
+      chartValue: hasData ? (alarmActive ? 100 : 0) : 0,
+      metricLabel: 'Alarm state',
+      lastUpdated,
+      threshold: 'Boolean value',
+      history: buildBooleanHistory(readings, (reading) => Boolean(reading.alarm), 'true', 'false'),
+    },
+  ];
+}
+
+function buildChartSeries(points: SensorHistoryPoint[]) {
+  if (points.length === 0) {
+    return {
+      labels: ['No Data'],
+      values: [0],
+    };
+  }
+
+  return {
+    labels: points.map((point) => point.time),
+    values: points.map((point) => point.value),
+  };
+}
+
+function formatRealtimeAlertTimestamp(timestamp?: number, receivedAt?: number) {
+  return formatLiveTimestamp(timestamp, receivedAt);
+}
+
+function mapDashboardAlert(alert: VehicleRealtimeAlert): DashboardRealtimeAlert {
+  const normalizedType = String(alert.type ?? 'info').toLowerCase();
+  const level =
+    normalizedType === 'sos'
+      ? 'critical'
+      : normalizedType === 'vibration'
+        ? 'warning'
+        : normalizedType === 'accident'
+          ? 'critical'
+          : 'info';
+
+  return {
+    id: alert.id ?? `${normalizedType}-${alert.timestamp ?? Date.now()}`,
+    title:
+      normalizedType === 'sos'
+        ? 'SOS Emergency'
+        : normalizedType === 'vibration'
+          ? 'Vibration Alert'
+          : normalizedType.toUpperCase(),
+    message: alert.message ?? 'Vehicle alert received',
+    type: normalizedType,
+    deviceId: alert.device_id ?? 'Unknown device',
+    receivedAt: alert.receivedAt,
+    timestamp: alert.timestamp,
+    level,
+  };
+}
+
+function formatGpsValue(value: number | undefined, digits: number) {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : '--';
+}
 
 export default function DashboardScreen() {
   const { colors } = useAppTheme();
@@ -326,12 +486,18 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const { vehicles, loading, refresh } = useVehicleData();
   const [showCharts, setShowCharts] = useState(true);
-  const [selectedSensorId, setSelectedSensorId] = useState(sensorReadings[0].id);
+  const [realtimeReadings, setRealtimeReadings] = useState<VehicleRealtimeReading[]>([]);
+  const [deviceStatus, setDeviceStatus] = useState<VehicleRealtimeStatus | null>(null);
+  const [realtimeAlerts, setRealtimeAlerts] = useState<VehicleRealtimeAlert[]>([]);
+  const [selectedSensorId, setSelectedSensorId] = useState<(typeof SENSOR_ORDER)[number]>('accelerometer');
   const [isSensorModalVisible, setIsSensorModalVisible] = useState(false);
+  const [isSosModalVisible, setIsSosModalVisible] = useState(false);
+  const [hasHydratedSos, setHasHydratedSos] = useState(false);
+  const [lastOpenedSosId, setLastOpenedSosId] = useState<string | null>(null);
   const [maintenanceEntries, setMaintenanceEntries] = useState<MaintenanceRecord[]>(defaultMaintenanceRecords);
   const [isMaintenanceModalVisible, setIsMaintenanceModalVisible] = useState(false);
   const [maintenanceForm, setMaintenanceForm] = useState<MaintenanceFormState>({
-    vehicleName: 'Pulsar NS 200',
+    vehicleName: '',
     maintenanceType: '',
     workDone: '',
     maintenanceDate: '',
@@ -345,14 +511,60 @@ export default function DashboardScreen() {
     refresh().catch(() => {});
   }, [refresh]);
 
+  useEffect(() => {
+    const unsubscribeReadings = subscribeToVehicleReadings(setRealtimeReadings);
+    const unsubscribeStatus = subscribeToVehicleStatus(setDeviceStatus);
+    const unsubscribeAlerts = subscribeToVehicleAlerts(setRealtimeAlerts);
+
+    return () => {
+      unsubscribeReadings();
+      unsubscribeStatus();
+      unsubscribeAlerts();
+    };
+  }, []);
+
+  const sensorReadings = useMemo(
+    () => createSensorReadings(realtimeReadings, realtimeAlerts),
+    [realtimeAlerts, realtimeReadings]
+  );
+
+  useEffect(() => {
+    if (!sensorReadings.some((sensor) => sensor.id === selectedSensorId)) {
+      setSelectedSensorId((sensorReadings[0]?.id as (typeof SENSOR_ORDER)[number]) ?? 'accelerometer');
+    }
+  }, [selectedSensorId, sensorReadings]);
+
   const selectedSensor = useMemo(
     () => sensorReadings.find((sensor) => sensor.id === selectedSensorId) ?? sensorReadings[0],
-    [selectedSensorId]
+    [selectedSensorId, sensorReadings]
   );
+  const dashboardAlerts = useMemo(
+    () => realtimeAlerts.map(mapDashboardAlert).slice(0, 5),
+    [realtimeAlerts]
+  );
+  const latestSosAlert = useMemo(
+    () => dashboardAlerts.find((alert) => alert.type === 'sos') ?? null,
+    [dashboardAlerts]
+  );
+  const latestRealtimeReading = realtimeReadings[realtimeReadings.length - 1];
+
+  useEffect(() => {
+    if (!hasHydratedSos) {
+      setLastOpenedSosId(latestSosAlert?.id ?? null);
+      setHasHydratedSos(true);
+      return;
+    }
+
+    if (latestSosAlert?.id && latestSosAlert.id !== lastOpenedSosId) {
+      setIsSosModalVisible(true);
+      setLastOpenedSosId(latestSosAlert.id);
+    }
+  }, [hasHydratedSos, lastOpenedSosId, latestSosAlert?.id]);
+
   const registeredVehicle = vehicles?.[0] ?? null;
   const registeredVehicleName = registeredVehicle
     ? `${registeredVehicle.make ?? ''} ${registeredVehicle.model ?? ''}`.trim() || 'My Vehicle'
-    : 'Pulsar NS 200';
+    : deviceStatus?.device_id ?? 'No vehicle added';
   const maintenanceStorageKey = `maintenance-records:${user?.id ?? 'guest'}`;
 
   useEffect(() => {
@@ -365,44 +577,46 @@ export default function DashboardScreen() {
         }
       } catch {}
 
-      setMaintenanceEntries(defaultMaintenanceRecords);
+      setMaintenanceEntries([]);
     };
 
     loadMaintenanceRecords().catch(() => {});
   }, [maintenanceStorageKey]);
-
-  const fuelEfficiencyData = {
-    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-    datasets: [
-      {
-        data: [28, 30, 32, 29, 31, 33],
-        color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`,
-        strokeWidth: 2,
-      },
-    ],
-    legend: ['MPG'],
-  };
 
   const vehicleMaintenanceRecords = registeredVehicle
     ? maintenanceEntries.map((record) => ({
         ...record,
         vehicleName: registeredVehicleName,
       }))
-    : maintenanceEntries.slice(0, 1);
+    : maintenanceEntries;
   const latestVehicleMaintenance = vehicleMaintenanceRecords[0] ?? null;
+  const temperatureSensor = sensorReadings.find((sensor) => sensor.id === 'temperature');
+  const soundSensor = sensorReadings.find((sensor) => sensor.id === 'sound');
+  const vibrationSensor = sensorReadings.find((sensor) => sensor.id === 'vibration');
+  const lightSensor = sensorReadings.find((sensor) => sensor.id === 'light');
+  const motionSensor = sensorReadings.find((sensor) => sensor.id === 'motion');
+  const tiltSensor = sensorReadings.find((sensor) => sensor.id === 'tilt');
 
   const maintenanceData = {
-    labels: vehicleMaintenanceRecords.map((record, index) => `Job ${index + 1}`),
+    labels: vehicleMaintenanceRecords.length
+      ? vehicleMaintenanceRecords.map((record, index) => `Job ${index + 1}`)
+      : ['No Data'],
     datasets: [
       {
-        data: vehicleMaintenanceRecords.map((record) => {
-          switch (record.status) {
-            case 'completed':
-              return 100;
-            default:
-              return 0;
-          }
-        }),
+        data: vehicleMaintenanceRecords.length
+          ? vehicleMaintenanceRecords.map((record) => {
+              switch (record.status) {
+                case 'completed':
+                  return 100;
+                case 'in-progress':
+                  return 60;
+                case 'scheduled':
+                  return 20;
+                default:
+                  return 0;
+              }
+            })
+          : [0],
       },
     ],
   };
@@ -430,6 +644,12 @@ export default function DashboardScreen() {
       legendFontColor: colors.icon,
     },
     {
+      name: 'Critical',
+      population: sensorReadings.filter((sensor) => sensor.status === 'critical').length,
+      color: '#D84C4C',
+      legendFontColor: colors.icon,
+    },
+    {
       name: 'Inactive',
       population: sensorReadings.filter((sensor) => sensor.status === 'inactive').length,
       color: '#7A869A',
@@ -452,16 +672,24 @@ export default function DashboardScreen() {
     ],
   };
 
+  const environmentSeries = buildChartSeries(temperatureSensor?.history ?? []);
+  const soundSeries = buildChartSeries(soundSensor?.history ?? []);
+  const movementSeries = buildChartSeries(vibrationSensor?.history ?? []);
+  const lightSeries = buildChartSeries(lightSensor?.history ?? []);
+  const safetySeries = buildChartSeries(motionSensor?.history ?? []);
+  const tiltSeries = buildChartSeries(tiltSensor?.history ?? []);
+  const selectedSensorSeries = buildChartSeries(selectedSensor?.history ?? []);
+
   const environmentTrendData = {
-    labels: selectedSensor.history.map((point) => point.time),
+    labels: environmentSeries.labels,
     datasets: [
       {
-        data: sensorReadings.find((sensor) => sensor.id === 'temperature')?.history.map((point) => point.value) ?? [],
+        data: environmentSeries.values,
         color: (opacity = 1) => `rgba(59, 178, 115, ${opacity})`,
         strokeWidth: 2,
       },
       {
-        data: sensorReadings.find((sensor) => sensor.id === 'sound')?.history.map((point) => point.value) ?? [],
+        data: soundSeries.values,
         color: (opacity = 1) => `rgba(110, 156, 255, ${opacity})`,
         strokeWidth: 2,
       },
@@ -469,31 +697,48 @@ export default function DashboardScreen() {
     legend: ['Temp', 'Sound'],
   };
 
-  const fuelComparisonData = {
-    labels: ['08', '09', '10', '11', '12', '13'],
+  const movementComparisonData = {
+    labels: movementSeries.labels,
     datasets: [
       {
-        data: sensorReadings.find((sensor) => sensor.id === 'fuel-a')?.history.map((point) => point.value) ?? [],
+        data: movementSeries.values,
         color: (opacity = 1) => `rgba(125, 95, 214, ${opacity})`,
       },
       {
-        data: sensorReadings.find((sensor) => sensor.id === 'fuel-b')?.history.map((point) => point.value) ?? [],
+        data: lightSeries.values,
         color: (opacity = 1) => `rgba(85, 103, 217, ${opacity})`,
       },
     ],
-    legend: ['Fuel A', 'Fuel B'],
+    legend: ['Vibration', 'Light'],
   };
 
   const selectedSensorHistoryChart = {
-    labels: selectedSensor.history.map((point) => point.time),
+    labels: selectedSensorSeries.labels,
     datasets: [
       {
-        data: selectedSensor.history.map((point) => point.value),
+        data: selectedSensorSeries.values,
         color: (opacity = 1) => hexToRgba(selectedSensor.accentColor, opacity),
         strokeWidth: 3,
       },
     ],
     legend: [selectedSensor.metricLabel],
+  };
+
+  const safetySignalData = {
+    labels: safetySeries.labels,
+    datasets: [
+      {
+        data: safetySeries.values,
+        color: (opacity = 1) => `rgba(244, 183, 64, ${opacity})`,
+        strokeWidth: 2,
+      },
+      {
+        data: tiltSeries.values,
+        color: (opacity = 1) => `rgba(240, 93, 94, ${opacity})`,
+        strokeWidth: 2,
+      },
+    ],
+    legend: ['Motion', 'Tilt'],
   };
 
   const vehicleDistributionData = [
@@ -518,11 +763,12 @@ export default function DashboardScreen() {
   ];
 
   const totalVehicles = registeredVehicle ? 1 : 0;
-  const activeVehicles = registeredVehicle?.status === 'active' ? 1 : 0;
   const maintenanceDue = registeredVehicle?.nextMaintenance ? 1 : 0;
   const sensorsInAlert = sensorReadings.filter(
     (sensor) => sensor.status === 'warning' || sensor.status === 'critical'
   ).length;
+  const criticalRealtimeAlerts = dashboardAlerts.filter((alert) => alert.level === 'critical').length;
+  const currentDeviceStatus = deviceStatus?.status ?? 'offline';
 
   const chartConfig = {
     backgroundGradientFrom: colors.card,
@@ -546,7 +792,7 @@ export default function DashboardScreen() {
     color: (opacity = 1) => hexToRgba(selectedSensor.accentColor, opacity),
   };
 
-  const handleOpenSensorDetails = (sensorId: string) => {
+  const handleOpenSensorDetails = (sensorId: (typeof SENSOR_ORDER)[number]) => {
     setSelectedSensorId(sensorId);
     setIsSensorModalVisible(true);
   };
@@ -735,6 +981,97 @@ export default function DashboardScreen() {
         </View>
       </Modal>
 
+      <Modal
+        visible={isSosModalVisible && Boolean(latestSosAlert)}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setIsSosModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.sosModalEyebrow}>Emergency Alert</Text>
+                <Text style={styles.modalTitle}>SOS Emergency</Text>
+                <Text style={styles.modalSubtitle}>
+                  {latestSosAlert?.message ?? 'SOS button pressed by user'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setIsSosModalVisible(false)}
+              >
+                <Text style={styles.modalCloseText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.detailStatsRow}>
+                <View style={styles.detailStatBox}>
+                  <Text style={styles.detailStatLabel}>Current</Text>
+                  <Text style={styles.detailStatValue}>SOS</Text>
+                </View>
+                <View style={styles.detailStatBox}>
+                  <Text style={styles.detailStatLabel}>Last Updated</Text>
+                  <Text style={styles.detailStatValueSmall}>
+                    {formatRealtimeAlertTimestamp(
+                      latestSosAlert?.timestamp,
+                      latestSosAlert?.receivedAt
+                    )}
+                  </Text>
+                </View>
+                <View style={styles.detailStatBox}>
+                  <Text style={styles.detailStatLabel}>Alarm</Text>
+                  <Text style={styles.detailStatValue}>
+                    {String(Boolean(latestRealtimeReading?.alarm))}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.historyHeader}>
+                <Text style={styles.historyTitle}>Live Emergency Details</Text>
+                <Text style={styles.historyHint}>
+                  {latestSosAlert?.deviceId ?? 'Unknown device'}
+                </Text>
+              </View>
+
+              <View style={styles.sosDetailGrid}>
+                <View style={styles.sosDetailCard}>
+                  <Text style={styles.sosDetailLabel}>Latitude</Text>
+                  <Text style={styles.sosDetailValue}>
+                    {formatGpsValue(latestRealtimeReading?.gps_lat, 6)}
+                  </Text>
+                </View>
+                <View style={styles.sosDetailCard}>
+                  <Text style={styles.sosDetailLabel}>Longitude</Text>
+                  <Text style={styles.sosDetailValue}>
+                    {formatGpsValue(latestRealtimeReading?.gps_lon, 6)}
+                  </Text>
+                </View>
+                <View style={styles.sosDetailCard}>
+                  <Text style={styles.sosDetailLabel}>Satellites</Text>
+                  <Text style={styles.sosDetailValue}>
+                    {formatGpsValue(latestRealtimeReading?.gps_sats, 0)}
+                  </Text>
+                </View>
+                <View style={styles.sosDetailCard}>
+                  <Text style={styles.sosDetailLabel}>Speed</Text>
+                  <Text style={styles.sosDetailValue}>
+                    {formatGpsValue(latestRealtimeReading?.gps_speed_kmh, 2)} km/h
+                  </Text>
+                </View>
+                <View style={styles.sosDetailCard}>
+                  <Text style={styles.sosDetailLabel}>Altitude</Text>
+                  <Text style={styles.sosDetailValue}>
+                    {formatGpsValue(latestRealtimeReading?.gps_altitude, 2)} m
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View>
@@ -748,16 +1085,16 @@ export default function DashboardScreen() {
 
         <View style={styles.quickRow}>
           <View style={styles.card}>
-            <Text style={styles.cardLabel}>Registered Vehicle</Text>
+            <Text style={styles.cardLabel}>Connected Device</Text>
             <Text style={styles.cardValue}>{registeredVehicleName}</Text>
           </View>
           <View style={styles.card}>
-            <Text style={styles.cardLabel}>Active</Text>
-            <Text style={styles.cardValue}>{activeVehicles}</Text>
+            <Text style={styles.cardLabel}>Device Status</Text>
+            <Text style={styles.cardValue}>{currentDeviceStatus}</Text>
           </View>
           <View style={styles.card}>
             <Text style={styles.cardLabel}>Sensor Alerts</Text>
-            <Text style={styles.cardValue}>{sensorsInAlert}</Text>
+            <Text style={styles.cardValue}>{sensorsInAlert + dashboardAlerts.length}</Text>
           </View>
           <View style={styles.card}>
             <Text style={styles.cardLabel}>Due Maint.</Text>
@@ -768,10 +1105,20 @@ export default function DashboardScreen() {
         <View style={styles.bannerCard}>
           <Text style={styles.bannerTitle}>ESP32 Vehicle Health Monitoring</Text>
           <Text style={styles.bannerText}>
-            Tap any sensor card or graph card below to open the full chart, current status, and
-            previous readings for that particular module.
+            Live values are now coming from Firebase Realtime Database. Tap any sensor card to see
+            its latest stream and recent readings from the ESP32 device.
           </Text>
         </View>
+
+        {latestSosAlert && (
+          <TouchableOpacity style={styles.sosBanner} onPress={() => setIsSosModalVisible(true)}>
+            <View>
+              <Text style={styles.sosBannerTitle}>SOS Emergency Active</Text>
+              <Text style={styles.sosBannerText}>{latestSosAlert.message}</Text>
+            </View>
+            <Text style={styles.sosBannerAction}>Open</Text>
+          </TouchableOpacity>
+        )}
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -843,9 +1190,9 @@ export default function DashboardScreen() {
               </View>
 
               <View style={styles.infographicCardWide}>
-                <Text style={styles.chartTitle}>Fuel Flow Comparison</Text>
+                <Text style={styles.chartTitle}>Vibration vs Light</Text>
                 <BarChart
-                  data={fuelComparisonData}
+                  data={movementComparisonData}
                   width={screenWidth - 72}
                   height={180}
                   chartConfig={chartConfig}
@@ -873,15 +1220,14 @@ export default function DashboardScreen() {
             </View>
 
             <View style={styles.chartCard}>
-              <Text style={styles.chartTitle}>Fuel Efficiency Trend</Text>
+              <Text style={styles.chartTitle}>Motion and Tilt Signals</Text>
               <LineChart
-                data={fuelEfficiencyData}
+                data={safetySignalData}
                 width={screenWidth - 40}
                 height={180}
                 chartConfig={chartConfig}
                 bezier
                 style={styles.chart}
-                formatYLabel={(value) => `${value} MPG`}
               />
             </View>
 
@@ -915,10 +1261,12 @@ export default function DashboardScreen() {
                 fromZero
               />
               <Text style={styles.maintenanceSubtitle}>
-                Shows how much of each vehicle maintenance job is completed.
+                Maintenance records stored locally for this signed-in user.
               </Text>
 
-              {vehicleMaintenanceRecords.map((record) => (
+              {vehicleMaintenanceRecords.length === 0 ? (
+                <Text style={styles.maintenanceText}>No maintenance records added yet.</Text>
+              ) : vehicleMaintenanceRecords.map((record) => (
                 <View key={record.id} style={styles.maintenanceRow}>
                   <View style={styles.maintenanceTopRow}>
                     <Text style={styles.maintenanceVehicle}>{record.vehicleName}</Text>
@@ -1041,11 +1389,13 @@ export default function DashboardScreen() {
             <View style={styles.vehicleRow}>
               <View style={styles.vehicleHeader}>
                 <Text style={styles.vehicleTitle}>{registeredVehicleName}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor('active') }]}>
-                  <Text style={styles.statusText}>Active</Text>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(currentDeviceStatus) }]}>
+                  <Text style={styles.statusText}>{currentDeviceStatus}</Text>
                 </View>
               </View>
-              <Text style={styles.vehicleMeta}>Bike | Demo registered vehicle for this user</Text>
+              <Text style={styles.vehicleMeta}>
+                No vehicle profile found locally. Realtime device data is still streaming from Firebase.
+              </Text>
             </View>
           )}
         </View>
@@ -1057,13 +1407,15 @@ export default function DashboardScreen() {
 const getStatusColor = (status?: string) => {
   switch (status) {
     case 'active':
+    case 'online':
       return '#4CAF50';
     case 'maintenance':
       return '#FF9800';
     case 'inactive':
+    case 'offline':
       return '#F44336';
     default:
-      return '#4CAF50';
+      return '#7A869A';
   }
 };
 
@@ -1080,12 +1432,22 @@ const getMaintenanceStatusColor = (status: MaintenanceRecord['status']) => {
   }
 };
 
-const formatDisplayDate = (value: string) =>
-  new Date(value).toLocaleDateString('en-IN', {
+const formatDisplayDate = (value: string) => {
+  if (!value) {
+    return '--';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
   });
+};
 
 function hexToRgba(hex: string, opacity: number) {
   const sanitized = hex.replace('#', '');
@@ -1281,6 +1643,78 @@ const createStyles = (colors: any) =>
       fontSize: 13,
       lineHeight: 20,
       color: '#DFF4FB',
+    },
+    sosBanner: {
+      backgroundColor: '#3A1616',
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 20,
+      borderWidth: 1,
+      borderColor: '#7C2525',
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      elevation: 3,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    sosBannerTitle: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: '#FFD5D2',
+      marginBottom: 4,
+    },
+    sosBannerText: {
+      fontSize: 13,
+      color: '#F7B9B4',
+      lineHeight: 18,
+      maxWidth: 260,
+    },
+    sosBannerAction: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#FFFFFF',
+      backgroundColor: '#FF5A52',
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 999,
+    },
+    sosModalEyebrow: {
+      fontSize: 11,
+      color: '#FF8A80',
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginTop: 6,
+      marginBottom: 6,
+    },
+    sosDetailGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+      marginTop: 12,
+    },
+    sosDetailCard: {
+      width: '48%',
+      backgroundColor: colors.mutedSurface,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 8,
+    },
+    sosDetailLabel: {
+      fontSize: 11,
+      color: colors.icon,
+      marginBottom: 6,
+    },
+    sosDetailValue: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.text,
     },
     section: {
       marginBottom: 24,
