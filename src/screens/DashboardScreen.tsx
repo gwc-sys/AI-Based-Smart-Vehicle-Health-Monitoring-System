@@ -91,6 +91,8 @@ const SENSOR_ORDER = [
   'sound',
   'light',
   'temperature',
+  'heart-rate',
+  'spo2',
   'motion',
   'tilt',
   'accident',
@@ -100,11 +102,73 @@ const SENSOR_ORDER = [
 const defaultMaintenanceRecords: MaintenanceRecord[] = [];
 
 function formatReadingLabel(timestamp: number | undefined, fallbackIndex: number) {
-  if (typeof timestamp === 'number') {
-    return `T${timestamp}`;
+  if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
+    const normalizedTimestamp =
+      timestamp > 1000000000000
+        ? timestamp
+        : timestamp > 1000000000
+          ? timestamp * 1000
+          : null;
+
+    if (normalizedTimestamp) {
+      return new Date(normalizedTimestamp).toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
   }
 
   return `#${fallbackIndex + 1}`;
+}
+
+function inferReadingTime(
+  reading: VehicleRealtimeReading,
+  latestReading: VehicleRealtimeReading | undefined,
+  fallbackIndex: number
+) {
+  const timestamp = reading.timestamp;
+
+  if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
+    if (timestamp > 1000000000000) {
+      return formatReadingLabel(timestamp, fallbackIndex);
+    }
+
+    if (timestamp > 1000000000) {
+      return formatReadingLabel(timestamp, fallbackIndex);
+    }
+
+    if (
+      latestReading &&
+      typeof latestReading.timestamp === 'number' &&
+      Number.isFinite(latestReading.timestamp) &&
+      typeof latestReading.receivedAt === 'number'
+    ) {
+      const offsetSeconds = latestReading.timestamp - timestamp;
+      const inferredTime = latestReading.receivedAt - offsetSeconds * 1000;
+
+      if (Number.isFinite(inferredTime) && inferredTime > 0) {
+        return new Date(inferredTime).toLocaleString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      }
+    }
+  }
+
+  if (typeof reading.receivedAt === 'number' && Number.isFinite(reading.receivedAt)) {
+    return new Date(reading.receivedAt).toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  return formatReadingLabel(timestamp, fallbackIndex);
 }
 
 function formatLiveTimestamp(timestamp?: number, receivedAt?: number) {
@@ -158,10 +222,12 @@ function buildNumericHistory(
   unit: string,
   digits: number = 0
 ): SensorHistoryPoint[] {
+  const latestReading = readings[readings.length - 1];
+
   return readings.map((reading, index) => {
     const value = selector(reading);
     return {
-      time: formatReadingLabel(reading.timestamp, index),
+      time: inferReadingTime(reading, latestReading, index),
       value,
       displayValue: `${value.toFixed(digits)} ${unit}`.trim(),
     };
@@ -174,10 +240,12 @@ function buildBooleanHistory(
   activeLabel: string,
   inactiveLabel: string
 ): SensorHistoryPoint[] {
+  const latestReading = readings[readings.length - 1];
+
   return readings.map((reading, index) => {
     const enabled = selector(reading);
     return {
-      time: formatReadingLabel(reading.timestamp, index),
+      time: inferReadingTime(reading, latestReading, index),
       value: enabled ? 100 : 0,
       displayValue: enabled ? activeLabel : inactiveLabel,
     };
@@ -191,6 +259,15 @@ function createSensorReadings(
   const latest = readings[readings.length - 1];
   const lastUpdated = formatLiveTimestamp(latest?.timestamp, latest?.receivedAt);
   const hasData = Boolean(latest);
+  const heartRateReadings = readings.filter(
+    (reading) => typeof reading.heart_rate_bpm === 'number' && Number.isFinite(reading.heart_rate_bpm)
+  );
+  const spo2Readings = readings.filter(
+    (reading) =>
+      typeof reading.oxygen_saturation_spo2 === 'number' && Number.isFinite(reading.oxygen_saturation_spo2)
+  );
+  const latestHeartRateReading = heartRateReadings[heartRateReadings.length - 1];
+  const latestSpo2Reading = spo2Readings[spo2Readings.length - 1];
 
   const createNumericSensor = ({
     id,
@@ -244,6 +321,10 @@ function createSensorReadings(
   const soundValue = toNumber(latest?.sound);
   const lightValue = toNumber(latest?.light);
   const temperatureValue = toNumber(latest?.temperature);
+  const heartRateValue = toNumber(latestHeartRateReading?.heart_rate_bpm);
+  const heartRateValid = Boolean(latestHeartRateReading?.heart_rate_valid);
+  const spo2Value = toNumber(latestSpo2Reading?.oxygen_saturation_spo2);
+  const spo2Valid = Boolean(latestSpo2Reading?.spo2_valid);
   const motionActive = Boolean(latest?.motion_detected);
   const tiltActive = Boolean(latest?.tilt_detected);
   const accidentActive = Boolean(latest?.accident_detected);
@@ -368,6 +449,64 @@ function createSensorReadings(
       digits: 1,
     }),
     {
+      id: 'heart-rate',
+      title: 'heart_rate_bpm',
+      shortLabel: 'Heart',
+      unit: 'bpm',
+      value: latestHeartRateReading ? `${heartRateValue.toFixed(0)} bpm` : '--',
+      subtitle: latestHeartRateReading
+        ? heartRateValid
+          ? 'Direct value from readings.heart_rate_bpm'
+          : 'Signal present but heart rate is not yet valid'
+        : 'Waiting for realtime database values',
+      status: latestHeartRateReading
+        ? !heartRateValid
+          ? 'inactive'
+          : heartRateValue > 120 || (heartRateValue > 0 && heartRateValue < 50)
+            ? 'critical'
+            : heartRateValue > 100 || heartRateValue < 60
+              ? 'warning'
+              : 'normal'
+        : 'inactive',
+      accentColor: '#E85D75',
+      chartValue: latestHeartRateReading ? toPercent(heartRateValue, 180) : 0,
+      metricLabel: 'Heart rate',
+      lastUpdated: formatLiveTimestamp(latestHeartRateReading?.timestamp, latestHeartRateReading?.receivedAt),
+      threshold: 'Healthy readings usually sit around 60-100 bpm',
+      history: buildNumericHistory(heartRateReadings, (reading) => toNumber(reading.heart_rate_bpm), 'bpm'),
+    },
+    {
+      id: 'spo2',
+      title: 'oxygen_saturation_spo2',
+      shortLabel: 'SpO2',
+      unit: '%',
+      value: latestSpo2Reading ? `${spo2Value.toFixed(0)} %` : '--',
+      subtitle: latestSpo2Reading
+        ? spo2Valid
+          ? 'Direct value from readings.oxygen_saturation_spo2'
+          : 'Signal present but SpO2 is not yet valid'
+        : 'Waiting for realtime database values',
+      status: latestSpo2Reading
+        ? !spo2Valid
+          ? 'inactive'
+          : spo2Value > 0 && spo2Value < 90
+            ? 'critical'
+            : spo2Value > 0 && spo2Value < 95
+              ? 'warning'
+              : 'normal'
+        : 'inactive',
+      accentColor: '#2FA8CC',
+      chartValue: latestSpo2Reading ? toPercent(spo2Value, 100) : 0,
+      metricLabel: 'Oxygen saturation',
+      lastUpdated: formatLiveTimestamp(latestSpo2Reading?.timestamp, latestSpo2Reading?.receivedAt),
+      threshold: 'Healthy readings are usually 95% and above',
+      history: buildNumericHistory(
+        spo2Readings,
+        (reading) => toNumber(reading.oxygen_saturation_spo2),
+        '%'
+      ),
+    },
+    {
       id: 'motion',
       title: 'motion_detected',
       shortLabel: 'Motion',
@@ -439,9 +578,24 @@ function buildChartSeries(points: SensorHistoryPoint[]) {
   }
 
   return {
-    labels: points.map((point) => point.time),
+    labels: points.map((point, index) => formatChartAxisLabel(point.time, index, points.length)),
     values: points.map((point) => point.value),
   };
+}
+
+function formatChartAxisLabel(label: string, index: number, total: number) {
+  if (label === 'No Data') {
+    return label;
+  }
+
+  const compactLabel = label.includes(',')
+    ? label.split(',').slice(-1)[0].trim()
+    : label;
+
+  const maxVisibleLabels = total > 10 ? 4 : total > 6 ? 5 : 6;
+  const interval = Math.max(1, Math.ceil(total / maxVisibleLabels));
+
+  return index % interval === 0 || index === total - 1 ? compactLabel : '';
 }
 
 function mapDashboardAlert(alert: VehicleRealtimeAlert): DashboardRealtimeAlert {
@@ -537,7 +691,40 @@ export default function DashboardScreen() {
     () => dashboardAlerts.find((alert) => alert.type === 'sos') ?? null,
     [dashboardAlerts]
   );
-  const latestRealtimeReading = realtimeReadings[realtimeReadings.length - 1];
+  const latestRealtimeReading = realtimeReadings[realtimeReadings.length - 1] ?? null;
+  const latestHeartReading = useMemo(
+    () =>
+      [...realtimeReadings]
+        .reverse()
+        .find(
+          (reading) =>
+            typeof reading.heart_rate_bpm === 'number' && Number.isFinite(reading.heart_rate_bpm)
+        ) ?? null,
+    [realtimeReadings]
+  );
+  const latestSpo2Reading = useMemo(
+    () =>
+      [...realtimeReadings]
+        .reverse()
+        .find(
+          (reading) =>
+            typeof reading.oxygen_saturation_spo2 === 'number' &&
+            Number.isFinite(reading.oxygen_saturation_spo2)
+        ) ?? null,
+    [realtimeReadings]
+  );
+  const heartRateValid = Boolean(latestHeartReading?.heart_rate_valid);
+  const spo2Valid = Boolean(latestSpo2Reading?.spo2_valid);
+  const heartRateRawValue = latestHeartReading?.heart_rate_bpm;
+  const spo2RawValue = latestSpo2Reading?.oxygen_saturation_spo2;
+  const heartRateDisplay =
+    typeof heartRateRawValue === 'number' && Number.isFinite(heartRateRawValue)
+      ? `${heartRateRawValue.toFixed(0)} bpm`
+      : '--';
+  const spo2Display =
+    typeof spo2RawValue === 'number' && Number.isFinite(spo2RawValue)
+      ? `${spo2RawValue.toFixed(0)}%`
+      : '--';
   const lastLocationReading = useMemo(
     () =>
       [...realtimeReadings]
@@ -670,6 +857,7 @@ export default function DashboardScreen() {
   const safetySeries = buildChartSeries(motionSensor?.history ?? []);
   const tiltSeries = buildChartSeries(tiltSensor?.history ?? []);
   const selectedSensorSeries = buildChartSeries(selectedSensor?.history ?? []);
+  const selectedSensorHistoryRows = [...(selectedSensor?.history ?? [])].reverse();
 
   const environmentTrendData = {
     labels: environmentSeries.labels,
@@ -954,6 +1142,8 @@ export default function DashboardScreen() {
                 chartConfig={selectedSensorChartConfig}
                 bezier
                 style={styles.chart}
+                verticalLabelRotation={18}
+                xLabelsOffset={-6}
               />
 
               <View style={styles.historyHeader}>
@@ -961,7 +1151,7 @@ export default function DashboardScreen() {
                 <Text style={styles.historyHint}>Recent sensor values</Text>
               </View>
 
-              {selectedSensor.history.map((point) => (
+              {selectedSensorHistoryRows.map((point) => (
                 <View key={`modal-${selectedSensor.id}-${point.time}`} style={styles.historyRow}>
                   <Text style={styles.historyTime}>{point.time}</Text>
                   <Text style={styles.historyValue}>{point.displayValue}</Text>
@@ -1011,12 +1201,70 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        <View style={styles.bannerCard}>
-          <Text style={styles.bannerTitle}>ESP32 Vehicle Health Monitoring</Text>
-          <Text style={styles.bannerText}>
-            Live values are now coming from Firebase Realtime Database. Tap any sensor card to see
-            its latest stream and recent readings from the ESP32 device.
-          </Text>
+        <View style={styles.healthSummaryPanel}>
+          <View style={styles.healthSummaryGlowPrimary} />
+          <View style={styles.healthSummaryGlowSecondary} />
+
+          <View style={styles.healthSummaryHeader}>
+            <View>
+              <Text style={styles.healthSummaryEyebrow}>AI Health Layer</Text>
+              <Text style={styles.healthSummaryTitle}>Semantic Vitals Overview</Text>
+              <Text style={styles.healthSummarySubtext}>
+                Interpreted live signals from the wearable sensor stream
+              </Text>
+            </View>
+            <View style={styles.healthSummaryCluster}>
+              <View style={styles.healthSummaryClusterDot} />
+              <View style={styles.healthSummaryClusterDot} />
+              <View style={styles.healthSummaryClusterDotLarge} />
+            </View>
+          </View>
+
+          <View style={styles.healthSummaryRow}>
+            <TouchableOpacity
+              style={[styles.healthSummaryCard, styles.healthSummaryCardHeart]}
+              activeOpacity={0.88}
+              onPress={() => handleOpenSensorDetails('heart-rate')}
+            >
+              <View style={styles.healthSummaryMetricTop}>
+                <Text style={styles.healthSummaryLabel}>heart_rate_bpm</Text>
+                <View style={styles.healthSummaryPill}>
+                  <Text style={styles.healthSummaryPillText}>{heartRateValid ? 'Stable' : 'Pending'}</Text>
+                </View>
+              </View>
+              <Text style={styles.healthSummaryValue}>{heartRateDisplay}</Text>
+              <Text style={styles.healthSummaryHint}>
+                {heartRateValid ? 'Pulse classification active' : 'Awaiting a valid pulse window'}
+              </Text>
+              <View style={styles.healthSummarySignalRow}>
+                <View style={styles.healthSummarySignalBarShort} />
+                <View style={styles.healthSummarySignalBarMedium} />
+                <View style={styles.healthSummarySignalBarTall} />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.healthSummaryCard, styles.healthSummaryCardSpo2]}
+              activeOpacity={0.88}
+              onPress={() => handleOpenSensorDetails('spo2')}
+            >
+              <View style={styles.healthSummaryMetricTop}>
+                <Text style={styles.healthSummaryLabel}>oxygen_saturation_spo2</Text>
+                <View style={styles.healthSummaryPill}>
+                  <Text style={styles.healthSummaryPillText}>{spo2Valid ? 'Stable' : 'Pending'}</Text>
+                </View>
+              </View>
+              <Text style={styles.healthSummaryValue}>{spo2Display}</Text>
+              <Text style={styles.healthSummaryHint}>
+                {spo2Valid ? 'Oxygen signal inference active' : 'Awaiting a valid oxygen sample'}
+              </Text>
+              <View style={styles.healthSummarySignalRow}>
+                <View style={styles.healthSummarySignalBarShort} />
+                <View style={styles.healthSummarySignalBarTall} />
+                <View style={styles.healthSummarySignalBarMedium} />
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {latestSosAlert && (
@@ -1029,10 +1277,22 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Live Sensor Monitor</Text>
-            <Text style={styles.sectionSubtitle}>Tap a sensor to inspect detailed history</Text>
+        <View style={[styles.section, styles.liveMonitorPanel]}>
+          <View style={styles.liveMonitorGlowPrimary} />
+          <View style={styles.liveMonitorGlowSecondary} />
+          <View style={styles.liveMonitorHeader}>
+            <View>
+              <Text style={styles.liveMonitorEyebrow}>AI Health Layer</Text>
+              <Text style={styles.liveMonitorTitle}>Live Sensor Monitor</Text>
+              <Text style={styles.liveMonitorSubtitle}>
+                Interpreted live signals from the connected vehicle stream
+              </Text>
+            </View>
+            <View style={styles.liveMonitorCluster}>
+              <View style={styles.liveMonitorClusterDot} />
+              <View style={styles.liveMonitorClusterDot} />
+              <View style={styles.liveMonitorClusterDotLarge} />
+            </View>
           </View>
           <View style={styles.sensorGrid}>
             {sensorReadings.map((sensor) => (
@@ -1083,6 +1343,8 @@ export default function DashboardScreen() {
                   style={styles.miniChart}
                   yAxisLabel=""
                   yAxisSuffix="%"
+                  verticalLabelRotation={18}
+                  xLabelsOffset={-4}
                 />
               </View>
 
@@ -1095,6 +1357,8 @@ export default function DashboardScreen() {
                   chartConfig={chartConfig}
                   bezier
                   style={styles.miniChart}
+                  verticalLabelRotation={18}
+                  xLabelsOffset={-4}
                 />
               </View>
 
@@ -1109,6 +1373,8 @@ export default function DashboardScreen() {
                   style={styles.miniChart}
                   yAxisLabel=""
                   yAxisSuffix=""
+                  verticalLabelRotation={18}
+                  xLabelsOffset={-4}
                 />
               </View>
             </View>
@@ -1125,6 +1391,8 @@ export default function DashboardScreen() {
                 yAxisSuffix="%"
                 showValuesOnTopOfBars
                 fromZero
+                verticalLabelRotation={18}
+                xLabelsOffset={-6}
               />
             </View>
 
@@ -1137,6 +1405,8 @@ export default function DashboardScreen() {
                 chartConfig={chartConfig}
                 bezier
                 style={styles.chart}
+                verticalLabelRotation={18}
+                xLabelsOffset={-4}
               />
             </View>
 
@@ -1168,6 +1438,8 @@ export default function DashboardScreen() {
                 yAxisSuffix="%"
                 showValuesOnTopOfBars
                 fromZero
+                verticalLabelRotation={18}
+                xLabelsOffset={-4}
               />
               <Text style={styles.maintenanceSubtitle}>
                 Maintenance records stored locally for this signed-in user.
@@ -1477,93 +1749,266 @@ const createStyles = (colors: any) =>
     container: {
       padding: 20,
       paddingBottom: 32,
+      gap: 2,
     },
     headerRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
-      marginBottom: 16,
+      marginBottom: 18,
       gap: 12,
+      paddingBottom: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
     },
     greeting: {
-      fontSize: 22,
-      fontWeight: '700',
+      fontSize: 28,
+      fontWeight: '800',
       color: colors.text,
+      letterSpacing: -0.7,
     },
     subGreeting: {
       fontSize: 13,
       color: colors.icon,
-      marginTop: 4,
+      marginTop: 6,
+      lineHeight: 19,
     },
     chartToggle: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      backgroundColor: colors.secondaryButtonBackground,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      backgroundColor: hexToRgba(colors.card, 0.62),
       borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     chartToggleText: {
       fontSize: 12,
-      color: colors.secondaryButtonText,
+      color: colors.text,
       fontWeight: '700',
     },
     quickRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       justifyContent: 'space-between',
-      marginBottom: 16,
+      marginBottom: 18,
     },
     card: {
       width: '48%',
-      backgroundColor: colors.card,
-      marginBottom: 8,
-      padding: 14,
-      borderRadius: 12,
-      alignItems: 'center',
+      backgroundColor: hexToRgba(colors.card, 0.9),
+      marginBottom: 12,
+      padding: 16,
+      borderRadius: 22,
+      alignItems: 'flex-start',
+      borderWidth: 1,
+      borderColor: colors.border,
       shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 16,
       elevation: 3,
+      overflow: 'hidden',
     },
     cardLabel: {
       fontSize: 12,
       color: colors.icon,
-      textAlign: 'center',
+      textAlign: 'left',
+      textTransform: 'uppercase',
+      letterSpacing: 1,
+      fontWeight: '700',
     },
     cardValue: {
       fontSize: 24,
+      fontWeight: '800',
+      color: colors.text,
+      marginTop: 10,
+    },
+    healthSummaryPanel: {
+      marginBottom: 20,
+      borderRadius: 28,
+      padding: 18,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
+      elevation: 4,
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    healthSummaryGlowPrimary: {
+      position: 'absolute',
+      width: 220,
+      height: 220,
+      borderRadius: 999,
+      top: -90,
+      right: -40,
+      backgroundColor: 'rgba(47, 168, 204, 0.12)',
+    },
+    healthSummaryGlowSecondary: {
+      position: 'absolute',
+      width: 180,
+      height: 180,
+      borderRadius: 999,
+      bottom: -90,
+      left: -30,
+      backgroundColor: 'rgba(232, 93, 117, 0.12)',
+    },
+    healthSummaryHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+      gap: 16,
+    },
+    healthSummaryEyebrow: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.icon,
+      textTransform: 'uppercase',
+      letterSpacing: 1.2,
+      marginBottom: 4,
+    },
+    healthSummaryTitle: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: colors.text,
+    },
+    healthSummarySubtext: {
+      fontSize: 12,
+      color: colors.icon,
+      marginTop: 4,
+      lineHeight: 18,
+      maxWidth: 360,
+    },
+    healthSummaryCluster: {
+      width: 72,
+      height: 72,
+      borderRadius: 999,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: hexToRgba(colors.card, 0.45),
+      position: 'relative',
+    },
+    healthSummaryClusterDot: {
+      position: 'absolute',
+      width: 10,
+      height: 10,
+      borderRadius: 999,
+      backgroundColor: '#2FA8CC',
+      top: 18,
+      left: 18,
+    },
+    healthSummaryClusterDotLarge: {
+      width: 16,
+      height: 16,
+      borderRadius: 999,
+      backgroundColor: '#E85D75',
+    },
+    healthSummaryRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    healthSummaryCard: {
+      flexGrow: 1,
+      flexShrink: 1,
+      flexBasis: '48%',
+      minWidth: 240,
+      borderRadius: 22,
+      paddingHorizontal: 18,
+      paddingVertical: 16,
+      borderWidth: 1,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      elevation: 3,
+    },
+    healthSummaryCardHeart: {
+      backgroundColor: 'rgba(232, 93, 117, 0.08)',
+      borderColor: 'rgba(232, 93, 117, 0.26)',
+    },
+    healthSummaryCardSpo2: {
+      backgroundColor: 'rgba(47, 168, 204, 0.08)',
+      borderColor: 'rgba(47, 168, 204, 0.26)',
+    },
+    healthSummaryMetricTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      marginBottom: 10,
+    },
+    healthSummaryLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.icon,
+    },
+    healthSummaryPill: {
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      backgroundColor: 'rgba(255,255,255,0.08)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.12)',
+    },
+    healthSummaryPillText: {
+      fontSize: 11,
       fontWeight: '700',
       color: colors.text,
-      marginTop: 6,
     },
-    bannerCard: {
-      backgroundColor: colors.tint,
-      borderRadius: 18,
-      padding: 18,
-      marginBottom: 20,
-    },
-    bannerTitle: {
-      fontSize: 17,
-      fontWeight: '700',
-      color: '#fff',
+    healthSummaryValue: {
+      fontSize: 32,
+      fontWeight: '800',
+      color: colors.text,
       marginBottom: 8,
+      letterSpacing: -0.8,
     },
-    bannerText: {
-      fontSize: 13,
-      lineHeight: 20,
-      color: '#DFF4FB',
+    healthSummaryHint: {
+      fontSize: 12,
+      color: colors.icon,
+      lineHeight: 18,
+    },
+    healthSummarySignalRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 6,
+      marginTop: 14,
+    },
+    healthSummarySignalBarShort: {
+      width: 8,
+      height: 16,
+      borderRadius: 999,
+      backgroundColor: 'rgba(255,255,255,0.28)',
+    },
+    healthSummarySignalBarMedium: {
+      width: 8,
+      height: 26,
+      borderRadius: 999,
+      backgroundColor: 'rgba(255,255,255,0.45)',
+    },
+    healthSummarySignalBarTall: {
+      width: 8,
+      height: 38,
+      borderRadius: 999,
+      backgroundColor: 'rgba(255,255,255,0.78)',
     },
     sosBanner: {
-      backgroundColor: '#3A1616',
-      borderRadius: 16,
-      padding: 16,
+      backgroundColor: 'rgba(92, 26, 32, 0.42)',
+      borderRadius: 24,
+      padding: 18,
       marginBottom: 20,
       borderWidth: 1,
-      borderColor: '#7C2525',
+      borderColor: 'rgba(255, 90, 82, 0.26)',
       shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.08,
-      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 18,
       elevation: 3,
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -1585,31 +2030,121 @@ const createStyles = (colors: any) =>
       fontSize: 13,
       fontWeight: '700',
       color: '#FFFFFF',
-      backgroundColor: '#FF5A52',
+      backgroundColor: 'rgba(255, 90, 82, 0.82)',
       paddingHorizontal: 14,
-      paddingVertical: 8,
+      paddingVertical: 9,
       borderRadius: 999,
     },
     section: {
-      marginBottom: 24,
+      marginBottom: 22,
+      backgroundColor: hexToRgba(colors.card, 0.74),
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 28,
+      padding: 18,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.1,
+      shadowRadius: 18,
+      elevation: 3,
+    },
+    liveMonitorPanel: {
+      overflow: 'hidden',
+      position: 'relative',
+      paddingTop: 20,
+    },
+    liveMonitorGlowPrimary: {
+      position: 'absolute',
+      width: 240,
+      height: 240,
+      borderRadius: 999,
+      top: -92,
+      right: -36,
+      backgroundColor: 'rgba(47, 168, 204, 0.12)',
+    },
+    liveMonitorGlowSecondary: {
+      position: 'absolute',
+      width: 190,
+      height: 190,
+      borderRadius: 999,
+      bottom: -98,
+      left: -42,
+      backgroundColor: 'rgba(232, 93, 117, 0.08)',
+    },
+    liveMonitorHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 16,
+      marginBottom: 18,
+    },
+    liveMonitorEyebrow: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.icon,
+      textTransform: 'uppercase',
+      letterSpacing: 1.2,
+      marginBottom: 4,
+    },
+    liveMonitorTitle: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: colors.text,
+      letterSpacing: -0.5,
+    },
+    liveMonitorSubtitle: {
+      fontSize: 12,
+      color: colors.icon,
+      marginTop: 4,
+      lineHeight: 18,
+      maxWidth: 360,
+    },
+    liveMonitorCluster: {
+      width: 72,
+      height: 72,
+      borderRadius: 999,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: hexToRgba(colors.card, 0.45),
+      position: 'relative',
+    },
+    liveMonitorClusterDot: {
+      position: 'absolute',
+      width: 10,
+      height: 10,
+      borderRadius: 999,
+      backgroundColor: '#2FA8CC',
+      top: 18,
+      left: 18,
+    },
+    liveMonitorClusterDotLarge: {
+      width: 16,
+      height: 16,
+      borderRadius: 999,
+      backgroundColor: '#E85D75',
     },
     sectionHeader: {
-      marginBottom: 12,
+      marginBottom: 14,
     },
     sectionTitle: {
-      fontSize: 16,
-      fontWeight: '600',
+      fontSize: 19,
+      fontWeight: '800',
       color: colors.text,
       marginBottom: 4,
+      letterSpacing: -0.4,
     },
     sectionSubtitle: {
       fontSize: 13,
       color: colors.icon,
+      lineHeight: 19,
     },
     sensorGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       justifyContent: 'space-between',
+      gap: 0,
     },
     liveBadge: {
       borderRadius: 999,
@@ -1687,46 +2222,52 @@ const createStyles = (colors: any) =>
       flexDirection: 'row',
       flexWrap: 'wrap',
       justifyContent: 'space-between',
-      marginBottom: 8,
+      marginBottom: 2,
     },
     infographicCard: {
       width: '48%',
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      padding: 12,
+      backgroundColor: hexToRgba(colors.card, 0.8),
+      borderRadius: 22,
+      padding: 14,
       marginBottom: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
       shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
-      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.1,
+      shadowRadius: 16,
       elevation: 3,
     },
     infographicCardWide: {
       width: '100%',
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      padding: 12,
+      backgroundColor: hexToRgba(colors.card, 0.8),
+      borderRadius: 22,
+      padding: 14,
       marginBottom: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
       shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
-      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.1,
+      shadowRadius: 16,
       elevation: 3,
     },
     chartCard: {
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 16,
+      backgroundColor: hexToRgba(colors.card, 0.8),
+      borderRadius: 24,
+      padding: 18,
       marginBottom: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
       shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 2 },
+      shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.1,
-      shadowRadius: 4,
+      shadowRadius: 16,
       elevation: 3,
     },
     chartTitle: {
-      fontSize: 16,
-      fontWeight: '600',
+      fontSize: 17,
+      fontWeight: '800',
       color: colors.text,
       marginBottom: 12,
     },
@@ -1739,14 +2280,16 @@ const createStyles = (colors: any) =>
       borderRadius: 8,
     },
     chartFallbackCard: {
-      backgroundColor: colors.card,
-      borderRadius: 12,
+      backgroundColor: hexToRgba(colors.card, 0.8),
+      borderRadius: 22,
       padding: 16,
       marginBottom: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
       shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 2 },
+      shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.1,
-      shadowRadius: 4,
+      shadowRadius: 16,
       elevation: 3,
     },
     chartFallbackText: {
@@ -1812,32 +2355,38 @@ const createStyles = (colors: any) =>
     actionsRow: {
       flexDirection: 'row',
       justifyContent: 'space-around',
-      marginBottom: 20,
+      marginBottom: 22,
+      gap: 10,
     },
     actionButton: {
-      backgroundColor: colors.tint,
-      paddingVertical: 10,
+      backgroundColor: hexToRgba(colors.card, 0.82),
+      paddingVertical: 13,
       paddingHorizontal: 14,
-      borderRadius: 8,
+      borderRadius: 18,
       flex: 1,
-      marginHorizontal: 4,
+      marginHorizontal: 0,
       alignItems: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     actionText: {
-      color: '#fff',
-      fontWeight: '600',
+      color: colors.text,
+      fontWeight: '700',
       fontSize: 12,
+      letterSpacing: 0.3,
     },
     vehicleRow: {
-      backgroundColor: colors.card,
-      padding: 16,
-      borderRadius: 12,
+      backgroundColor: hexToRgba(colors.card, 0.86),
+      padding: 18,
+      borderRadius: 24,
       marginBottom: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
       shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.05,
-      shadowRadius: 2,
-      elevation: 2,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.1,
+      shadowRadius: 14,
+      elevation: 3,
     },
     vehicleHeader: {
       flexDirection: 'row',
@@ -1846,8 +2395,8 @@ const createStyles = (colors: any) =>
       marginBottom: 4,
     },
     vehicleTitle: {
-      fontSize: 14,
-      fontWeight: '600',
+      fontSize: 16,
+      fontWeight: '800',
       color: colors.text,
     },
     statusBadge: {
@@ -1863,7 +2412,8 @@ const createStyles = (colors: any) =>
     vehicleMeta: {
       fontSize: 12,
       color: colors.icon,
-      marginTop: 4,
+      marginTop: 6,
+      lineHeight: 18,
     },
     vehicleMaintenanceBox: {
       marginTop: 12,

@@ -19,7 +19,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemColorScheme = useColorScheme();
-  const [isDarkMode, setIsDarkModeState] = useState(systemColorScheme === 'dark');
+  const [isDarkMode, setIsDarkModeState] = useState(true);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         console.error('Failed to load dark mode preference:', error);
       }
 
-      setIsDarkModeState(systemColorScheme === 'dark');
+      setIsDarkModeState(true);
       setIsReady(true);
     };
 

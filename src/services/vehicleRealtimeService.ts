@@ -13,10 +13,15 @@ export type VehicleRealtimeReading = {
   gps_lon?: number;
   gps_sats?: number;
   gps_speed_kmh?: number;
+  heart_rate_bpm?: number;
+  heart_rate_valid?: boolean;
+  infrared_signal?: number;
   light?: number;
   motion_detected?: boolean;
+  oxygen_saturation_spo2?: number;
   receivedAt?: number;
   sound?: number;
+  spo2_valid?: boolean;
   temperature?: number;
   tilt_detected?: boolean;
   timestamp?: number;
@@ -78,6 +83,46 @@ function readNumberField(source: Record<string, unknown>, ...keys: string[]) {
   return undefined;
 }
 
+function toBoolean(value: unknown) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+
+  if (typeof value === 'number') {
+    if (value === 1) {
+      return true;
+    }
+
+    if (value === 0) {
+      return false;
+    }
+  }
+
+  return undefined;
+}
+
+function readBooleanField(source: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = toBoolean(source[key]);
+    if (typeof value === 'boolean') {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
 function hasGpsCoordinates(reading: VehicleRealtimeReading | null | undefined) {
   return (
     typeof reading?.gps_lat === 'number' &&
@@ -96,14 +141,28 @@ function normalizeVehicleReading(reading: VehicleRealtimeReading): VehicleRealti
     accel_x: readNumberField(rawReading, 'accel_x'),
     accel_y: readNumberField(rawReading, 'accel_y'),
     accel_z: readNumberField(rawReading, 'accel_z'),
+    accident_detected: readBooleanField(rawReading, 'accident_detected'),
+    alarm: readBooleanField(rawReading, 'alarm'),
     gps_altitude: readNumberField(rawReading, 'gps_altitude', 'altitude', 'gpsAltitude'),
     gps_lat: readNumberField(rawReading, 'gps_lat', 'latitude', 'lat', 'gpsLatitude'),
     gps_lon: readNumberField(rawReading, 'gps_lon', 'longitude', 'lng', 'lon', 'gpsLongitude'),
     gps_sats: readNumberField(rawReading, 'gps_sats', 'satellites', 'gpsSatellites'),
     gps_speed_kmh: readNumberField(rawReading, 'gps_speed_kmh', 'speed', 'speed_kmh', 'gpsSpeedKmh'),
+    heart_rate_bpm: readNumberField(rawReading, 'heart_rate_bpm', 'heartRateBpm'),
+    heart_rate_valid: readBooleanField(rawReading, 'heart_rate_valid', 'heartRateValid'),
+    infrared_signal: readNumberField(rawReading, 'infrared_signal', 'infraredSignal'),
     light: readNumberField(rawReading, 'light'),
+    motion_detected: readBooleanField(rawReading, 'motion_detected'),
+    oxygen_saturation_spo2: readNumberField(
+      rawReading,
+      'oxygen_saturation_spo2',
+      'spo2',
+      'oxygenSaturationSpo2'
+    ),
     sound: readNumberField(rawReading, 'sound'),
+    spo2_valid: readBooleanField(rawReading, 'spo2_valid', 'spo2Valid'),
     temperature: readNumberField(rawReading, 'temperature'),
+    tilt_detected: readBooleanField(rawReading, 'tilt_detected'),
     timestamp: readNumberField(rawReading, 'timestamp'),
     vibration: readNumberField(rawReading, 'vibration'),
   };
@@ -142,33 +201,53 @@ function sortByTimestamp<T extends { timestamp?: number }>(items: T[]) {
   return items.sort((left, right) => (left.timestamp ?? 0) - (right.timestamp ?? 0));
 }
 
+function collectReadingCollections(node: unknown): VehicleRealtimeReading[][] {
+  if (!node || typeof node !== 'object') {
+    return [];
+  }
+
+  const objectNode = node as Record<string, unknown>;
+  const localReadings = objectNode.readings;
+  const nestedCollections = Object.values(objectNode).flatMap((value) => collectReadingCollections(value));
+
+  if (!localReadings || typeof localReadings !== 'object') {
+    return nestedCollections;
+  }
+
+  return [[...(Object.values(localReadings) as VehicleRealtimeReading[])], ...nestedCollections];
+}
+
 export function subscribeToVehicleReadings(
   callback: (readings: VehicleRealtimeReading[]) => void
 ) {
   const database = getDatabase(getFirebaseApp());
-  const readingsRef = ref(database, `${DATABASE_ROOT}/readings`);
+  const readingsRef = ref(database, '/');
 
   return onValue(readingsRef, (snapshot) => {
-    const value = snapshot.val() as Record<string, VehicleRealtimeReading> | null;
+    const rootValue = snapshot.val() as Record<string, unknown> | null;
     const receivedAt = Date.now();
-    const normalizedReadings = sortByTimestamp(
-      Object.values(value ?? {}).map((reading) => ({
-        ...normalizeVehicleReading(reading),
-        receivedAt,
-      }))
+    const readingCollections = collectReadingCollections(rootValue).flatMap((collection) =>
+      // Keep a recent slice from each device stream so lower-frequency health sensors
+      // are not pushed out by a noisier accelerometer stream.
+      sortByTimestamp(
+        collection.map((reading) => ({
+          ...normalizeVehicleReading(reading),
+          receivedAt,
+        }))
+      ).slice(-12)
     );
-    const recentReadings = normalizedReadings.slice(-12);
+    const normalizedReadings = sortByTimestamp(readingCollections);
     const latestGpsReading = [...normalizedReadings].reverse().find(hasGpsCoordinates) ?? null;
     const readings =
       latestGpsReading &&
-      !recentReadings.some(
+      !normalizedReadings.some(
         (reading) =>
           reading.timestamp === latestGpsReading.timestamp &&
           reading.gps_lat === latestGpsReading.gps_lat &&
           reading.gps_lon === latestGpsReading.gps_lon
       )
-        ? [...recentReadings.slice(-11), latestGpsReading]
-        : recentReadings;
+        ? [...normalizedReadings, latestGpsReading]
+        : normalizedReadings;
 
     callback(readings);
   });
