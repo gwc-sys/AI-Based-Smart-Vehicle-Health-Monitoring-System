@@ -35,6 +35,10 @@ export type VehicleRealtimeStatus = {
 };
 
 export type VehicleRealtimeAlert = {
+  acknowledged?: boolean;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  gps_fix?: boolean;
   id?: string;
   device_id?: string;
   gps_altitude?: number;
@@ -42,11 +46,18 @@ export type VehicleRealtimeAlert = {
   gps_lon?: number;
   gps_sats?: number;
   gps_speed_kmh?: number;
+  hospital_distance_km?: number;
+  hospital_name?: string;
+  hospital_phone?: string;
   latitude?: number;
+  last_known_latitude?: number;
+  last_known_longitude?: number;
   longitude?: number;
   message?: string;
+  priority?: string;
   receivedAt?: number;
   satellites?: number;
+  source?: string;
   speed_kmh?: number;
   timestamp?: number;
   type?: string;
@@ -173,17 +184,56 @@ function normalizeVehicleAlert(alert: VehicleRealtimeAlert): VehicleRealtimeAler
 
   return {
     ...alert,
+    acknowledged: readBooleanField(rawAlert, 'acknowledged'),
+    emergency_contact_name:
+      typeof rawAlert.emergency_contact_name === 'string' ? rawAlert.emergency_contact_name : undefined,
+    emergency_contact_phone:
+      typeof rawAlert.emergency_contact_phone === 'string' ? rawAlert.emergency_contact_phone : undefined,
+    gps_fix: readBooleanField(rawAlert, 'gps_fix', 'gpsFix'),
     gps_altitude: readNumberField(rawAlert, 'gps_altitude', 'altitude', 'gpsAltitude'),
     gps_lat: readNumberField(rawAlert, 'gps_lat', 'latitude', 'lat', 'gpsLatitude'),
     gps_lon: readNumberField(rawAlert, 'gps_lon', 'longitude', 'lng', 'lon', 'gpsLongitude'),
     gps_sats: readNumberField(rawAlert, 'gps_sats', 'satellites', 'gpsSatellites'),
     gps_speed_kmh: readNumberField(rawAlert, 'gps_speed_kmh', 'speed_kmh', 'speed', 'gpsSpeedKmh'),
+    hospital_distance_km: readNumberField(rawAlert, 'hospital_distance_km', 'hospitalDistanceKm'),
+    hospital_name: typeof rawAlert.hospital_name === 'string' ? rawAlert.hospital_name : undefined,
+    hospital_phone: typeof rawAlert.hospital_phone === 'string' ? rawAlert.hospital_phone : undefined,
     latitude: readNumberField(rawAlert, 'latitude', 'gps_lat', 'lat', 'gpsLatitude'),
+    last_known_latitude: readNumberField(
+      rawAlert,
+      'last_known_latitude',
+      'lastKnownLatitude',
+      'previous_latitude'
+    ),
+    last_known_longitude: readNumberField(
+      rawAlert,
+      'last_known_longitude',
+      'lastKnownLongitude',
+      'previous_longitude'
+    ),
     longitude: readNumberField(rawAlert, 'longitude', 'gps_lon', 'lng', 'lon', 'gpsLongitude'),
+    priority: typeof rawAlert.priority === 'string' ? rawAlert.priority : undefined,
     satellites: readNumberField(rawAlert, 'satellites', 'gps_sats', 'gpsSatellites'),
+    source: typeof rawAlert.source === 'string' ? rawAlert.source : undefined,
     speed_kmh: readNumberField(rawAlert, 'speed_kmh', 'gps_speed_kmh', 'speed', 'gpsSpeedKmh'),
     timestamp: toFiniteNumber(alert.timestamp),
   };
+}
+
+export function getAlertCoordinates(alert: VehicleRealtimeAlert | null | undefined) {
+  const latitude = alert?.gps_lat ?? alert?.latitude ?? alert?.last_known_latitude;
+  const longitude = alert?.gps_lon ?? alert?.longitude ?? alert?.last_known_longitude;
+
+  if (
+    typeof latitude === 'number' &&
+    Number.isFinite(latitude) &&
+    typeof longitude === 'number' &&
+    Number.isFinite(longitude)
+  ) {
+    return { latitude, longitude };
+  }
+
+  return null;
 }
 
 function normalizeVehicleStatus(status: VehicleRealtimeStatus | null): VehicleRealtimeStatus | null {

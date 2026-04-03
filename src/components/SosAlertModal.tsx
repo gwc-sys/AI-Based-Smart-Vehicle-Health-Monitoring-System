@@ -1,7 +1,23 @@
 import { useAppTheme } from '@/context/ThemeContext';
-import { VehicleRealtimeAlert, VehicleRealtimeReading } from '@/services/vehicleRealtimeService';
+import {
+  buildCallLink,
+  buildEmergencyMessage,
+  buildGoogleMapsLink,
+  buildHospitalSearchLink,
+  buildSmsLink,
+  buildWhatsAppLink,
+  EMPTY_EMERGENCY_CONFIG,
+  EmergencyConfig,
+  resolveEmergencyConfigFromAlert,
+  subscribeToEmergencyConfig,
+} from '../services/emergencyConfigService';
+import {
+  getAlertCoordinates,
+  VehicleRealtimeAlert,
+  VehicleRealtimeReading,
+} from '@/services/vehicleRealtimeService';
 import * as Linking from 'expo-linking';
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
@@ -28,10 +44,12 @@ function alertToReading(alert: VehicleRealtimeAlert | null): VehicleRealtimeRead
     return null;
   }
 
+  const alertCoordinates = getAlertCoordinates(alert);
+
   return {
     gps_altitude: alert.gps_altitude,
-    gps_lat: alert.gps_lat ?? alert.latitude,
-    gps_lon: alert.gps_lon ?? alert.longitude,
+    gps_lat: alertCoordinates?.latitude,
+    gps_lon: alertCoordinates?.longitude,
     gps_sats: alert.gps_sats ?? alert.satellites,
     gps_speed_kmh: alert.gps_speed_kmh ?? alert.speed_kmh,
     timestamp: alert.timestamp,
@@ -111,10 +129,6 @@ function createMapUrl(latitude: number, longitude: number) {
   return `https://www.openstreetmap.org/export/embed.html?bbox=${left}%2C${bottom}%2C${right}%2C${top}&layer=mapnik&marker=${latitude}%2C${longitude}`;
 }
 
-function createExternalMapUrl(latitude: number, longitude: number) {
-  return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-}
-
 function renderWebMapFrame(mapUrl: string) {
   return React.createElement('iframe' as any, {
     src: mapUrl,
@@ -129,6 +143,19 @@ function renderWebMapFrame(mapUrl: string) {
   });
 }
 
+async function openUrl(url: string) {
+  try {
+    const supported = await Linking.canOpenURL(url);
+    if (!supported) {
+      return;
+    }
+
+    await Linking.openURL(url);
+  } catch {
+    return;
+  }
+}
+
 export default function SosAlertModal({
   visible,
   onClose,
@@ -139,24 +166,33 @@ export default function SosAlertModal({
 }: SosAlertModalProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const [emergencyConfig, setEmergencyConfig] = useState<EmergencyConfig>(EMPTY_EMERGENCY_CONFIG);
   const resolvedReading = resolveSosReading(alert, reading, fallbackLocationReading);
   const resolvedDeviceId = alert?.device_id ?? deviceId ?? 'Unknown device';
   const latitude = resolvedReading?.gps_lat;
   const longitude = resolvedReading?.gps_lon;
   const hasCoordinates = hasGpsCoordinates(resolvedReading);
 
+  useEffect(() => {
+    const unsubscribe = subscribeToEmergencyConfig(setEmergencyConfig);
+    return unsubscribe;
+  }, []);
+
+  const resolvedEmergencyConfig = useMemo(
+    () => resolveEmergencyConfigFromAlert(emergencyConfig, alert),
+    [alert, emergencyConfig]
+  );
   const mapUrl =
     hasCoordinates && typeof latitude === 'number' && typeof longitude === 'number'
       ? createMapUrl(latitude, longitude)
       : null;
-
-  const openExternalMap = () => {
-    if (!hasCoordinates || typeof latitude !== 'number' || typeof longitude !== 'number') {
-      return;
-    }
-
-    Linking.openURL(createExternalMapUrl(latitude, longitude)).catch(() => undefined);
-  };
+  const emergencyMessage = buildEmergencyMessage(alert, latitude, longitude);
+  const familyContacts = resolvedEmergencyConfig.familyContacts.filter((contact) => contact.phone.trim());
+  const nearestHospitalLabel =
+    resolvedEmergencyConfig.hospitalName?.trim() || alert?.hospital_name?.trim() || 'Nearest hospital';
+  const emergencyNumber = resolvedEmergencyConfig.emergencyNumber?.trim() || '';
+  const ambulanceNumber = resolvedEmergencyConfig.ambulanceNumber?.trim() || '';
+  const hospitalPhone = resolvedEmergencyConfig.hospitalPhone?.trim() || '';
 
   return (
     <Modal visible={visible && Boolean(alert)} animationType="fade" transparent onRequestClose={onClose}>
@@ -164,7 +200,7 @@ export default function SosAlertModal({
         <View style={styles.card}>
           <View style={styles.header}>
             <View style={styles.headerCopy}>
-              <Text style={styles.eyebrow}>Emergency Alert</Text>
+              <Text style={styles.eyebrow}>Emergency Response</Text>
               <Text style={styles.title}>SOS Emergency</Text>
               <Text style={styles.subtitle}>{alert?.message ?? 'SOS button pressed by user'}</Text>
             </View>
@@ -176,8 +212,8 @@ export default function SosAlertModal({
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.statsRow}>
               <View style={styles.statBox}>
-                <Text style={styles.statLabel}>Current</Text>
-                <Text style={styles.statValue}>SOS</Text>
+                <Text style={styles.statLabel}>Priority</Text>
+                <Text style={styles.statValue}>{String(alert?.priority ?? 'critical').toUpperCase()}</Text>
               </View>
               <View style={styles.statBox}>
                 <Text style={styles.statLabel}>Last Updated</Text>
@@ -189,6 +225,68 @@ export default function SosAlertModal({
                 <Text style={styles.statLabel}>Device</Text>
                 <Text style={styles.statValueSmall}>{resolvedDeviceId}</Text>
               </View>
+            </View>
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Emergency Action Plan</Text>
+              <Text style={styles.sectionHint}>
+                One tap can open calling, SMS, WhatsApp, map, and nearby hospital actions.
+              </Text>
+            </View>
+
+            <View style={styles.actionGrid}>
+              <TouchableOpacity
+                style={[styles.primaryActionCard, !emergencyNumber && styles.actionCardDisabled]}
+                disabled={!emergencyNumber}
+                onPress={() => (emergencyNumber ? openUrl(buildCallLink(emergencyNumber)) : undefined)}
+              >
+                <Text style={styles.primaryActionTitle}>Call Emergency</Text>
+                <Text style={styles.primaryActionText}>{emergencyNumber || 'Firebase number not available'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryActionCard, !ambulanceNumber && styles.actionCardDisabled]}
+                disabled={!ambulanceNumber}
+                onPress={() => (ambulanceNumber ? openUrl(buildCallLink(ambulanceNumber)) : undefined)}
+              >
+                <Text style={styles.primaryActionTitle}>Call Ambulance</Text>
+                <Text style={styles.primaryActionText}>{ambulanceNumber || 'Firebase number not available'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryActionCard, !hasCoordinates && styles.actionCardDisabled]}
+                disabled={!hasCoordinates}
+                onPress={() =>
+                  hasCoordinates && latitude && longitude
+                    ? openUrl(buildHospitalSearchLink(latitude, longitude))
+                    : undefined
+                }
+              >
+                <Text style={styles.primaryActionTitle}>Find Hospital</Text>
+                <Text style={styles.primaryActionText}>{nearestHospitalLabel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryActionCard, !hospitalPhone && styles.actionCardDisabled]}
+                disabled={!hospitalPhone}
+                onPress={() =>
+                  hospitalPhone
+                    ? openUrl(buildCallLink(hospitalPhone))
+                    : undefined
+                }
+              >
+                <Text style={styles.primaryActionTitle}>Call Hospital</Text>
+                <Text style={styles.primaryActionText}>{hospitalPhone || 'Firebase hospital phone not available'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryActionCard, !hasCoordinates && styles.actionCardDisabled]}
+                disabled={!hasCoordinates}
+                onPress={() =>
+                  hasCoordinates && typeof latitude === 'number' && typeof longitude === 'number'
+                    ? openUrl(buildGoogleMapsLink(latitude, longitude))
+                    : undefined
+                }
+              >
+                <Text style={styles.primaryActionTitle}>Share Map</Text>
+                <Text style={styles.primaryActionText}>Open live SOS coordinates</Text>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.sectionHeader}>
@@ -213,20 +311,11 @@ export default function SosAlertModal({
                 <View style={styles.mapFallback}>
                   <Text style={styles.mapFallbackTitle}>Map unavailable</Text>
                   <Text style={styles.mapFallbackText}>
-                    Latitude and longitude are not available in Firebase yet.
+                    Latitude and longitude are not available yet, so the app will fall back to the last
+                    known position when it arrives.
                   </Text>
                 </View>
               )}
-            </View>
-
-            <View style={styles.locationActions}>
-              <TouchableOpacity
-                style={[styles.actionButton, !hasCoordinates && styles.actionButtonDisabled]}
-                onPress={openExternalMap}
-                disabled={!hasCoordinates}
-              >
-                <Text style={styles.actionButtonText}>Open Full Map</Text>
-              </TouchableOpacity>
             </View>
 
             <View style={styles.detailGrid}>
@@ -251,9 +340,75 @@ export default function SosAlertModal({
                 <Text style={styles.detailValue}>{formatGpsValue(resolvedReading?.gps_altitude, 2)} m</Text>
               </View>
               <View style={styles.detailCard}>
-                <Text style={styles.detailLabel}>Alarm</Text>
-                <Text style={styles.detailValue}>{String(Boolean(resolvedReading?.alarm))}</Text>
+                <Text style={styles.detailLabel}>GPS Fix</Text>
+                <Text style={styles.detailValue}>{String(alert?.gps_fix ?? hasCoordinates)}</Text>
               </View>
+            </View>
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Family And Guardian Outreach</Text>
+              <Text style={styles.sectionHint}>
+                These actions use the numbers saved in the Emergency tab for quick response.
+              </Text>
+            </View>
+
+            {familyContacts.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateTitle}>No emergency contacts saved</Text>
+                <Text style={styles.emptyStateText}>
+                  No emergency contacts were found in Firebase for this device or SOS alert yet.
+                </Text>
+              </View>
+            ) : (
+              familyContacts.map((contact) => (
+                <View key={contact.id} style={styles.contactCard}>
+                  <View style={styles.contactHeader}>
+                    <View>
+                      <Text style={styles.contactName}>{contact.name}</Text>
+                      <Text style={styles.contactMeta}>
+                        {contact.relationship || 'Emergency contact'} . {contact.phone}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.contactActionRow}>
+                    <TouchableOpacity
+                      style={styles.secondaryActionButton}
+                      onPress={() => openUrl(buildCallLink(contact.phone))}
+                    >
+                      <Text style={styles.secondaryActionText}>Call</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.secondaryActionButton}
+                      onPress={() => openUrl(buildSmsLink(contact.phone, emergencyMessage))}
+                    >
+                      <Text style={styles.secondaryActionText}>SMS</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.secondaryActionButton,
+                        !contact.whatsapp?.trim() && styles.actionCardDisabled,
+                      ]}
+                      disabled={!contact.whatsapp?.trim()}
+                      onPress={() =>
+                        contact.whatsapp?.trim()
+                          ? openUrl(buildWhatsAppLink(contact.whatsapp, emergencyMessage))
+                          : undefined
+                      }
+                    >
+                      <Text style={styles.secondaryActionText}>WhatsApp</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))
+            )}
+
+            <View style={styles.infoCard}>
+              <Text style={styles.infoTitle}>Implementation note</Text>
+              <Text style={styles.infoText}>
+                This modal now prefers realtime Firebase data for emergency numbers, hospital details, and
+                guardian contacts. Fully automatic calling still needs your ESP32 GSM module or a backend
+                telephony service.
+              </Text>
             </View>
           </ScrollView>
         </View>
@@ -353,7 +508,7 @@ const createStyles = (colors: any) =>
       color: colors.text,
     },
     sectionHeader: {
-      marginTop: 8,
+      marginTop: 10,
       marginBottom: 10,
     },
     sectionTitle: {
@@ -365,6 +520,36 @@ const createStyles = (colors: any) =>
       fontSize: 12,
       color: colors.icon,
       marginTop: 2,
+      lineHeight: 18,
+    },
+    actionGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+      marginBottom: 4,
+    },
+    primaryActionCard: {
+      width: '48%',
+      backgroundColor: 'rgba(255, 90, 82, 0.12)',
+      borderColor: 'rgba(255, 90, 82, 0.35)',
+      borderWidth: 1,
+      borderRadius: 16,
+      padding: 14,
+      marginBottom: 10,
+    },
+    primaryActionTitle: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: colors.text,
+      marginBottom: 6,
+    },
+    primaryActionText: {
+      fontSize: 12,
+      color: colors.icon,
+      lineHeight: 18,
+    },
+    actionCardDisabled: {
+      opacity: 0.45,
     },
     mapCard: {
       overflow: 'hidden',
@@ -396,26 +581,6 @@ const createStyles = (colors: any) =>
       textAlign: 'center',
       color: colors.icon,
     },
-    locationActions: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      marginTop: 12,
-      marginBottom: 4,
-    },
-    actionButton: {
-      backgroundColor: colors.tint,
-      borderRadius: 999,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-    },
-    actionButtonDisabled: {
-      opacity: 0.45,
-    },
-    actionButtonText: {
-      color: '#fff',
-      fontSize: 12,
-      fontWeight: '700',
-    },
     detailGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -441,5 +606,80 @@ const createStyles = (colors: any) =>
       fontSize: 14,
       fontWeight: '700',
       color: colors.text,
+    },
+    contactCard: {
+      backgroundColor: colors.mutedSurface,
+      borderRadius: 16,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 10,
+    },
+    contactHeader: {
+      marginBottom: 12,
+    },
+    contactName: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    contactMeta: {
+      fontSize: 12,
+      color: colors.icon,
+      marginTop: 4,
+    },
+    contactActionRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    secondaryActionButton: {
+      backgroundColor: colors.tint,
+      borderRadius: 999,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    secondaryActionText: {
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    emptyState: {
+      backgroundColor: colors.mutedSurface,
+      borderRadius: 16,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    emptyStateTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 6,
+    },
+    emptyStateText: {
+      fontSize: 12,
+      color: colors.icon,
+      lineHeight: 18,
+    },
+    infoCard: {
+      marginTop: 8,
+      marginBottom: 8,
+      backgroundColor: 'rgba(47, 168, 204, 0.10)',
+      borderRadius: 16,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: 'rgba(47, 168, 204, 0.25)',
+    },
+    infoTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 6,
+    },
+    infoText: {
+      fontSize: 12,
+      color: colors.icon,
+      lineHeight: 18,
     },
   });

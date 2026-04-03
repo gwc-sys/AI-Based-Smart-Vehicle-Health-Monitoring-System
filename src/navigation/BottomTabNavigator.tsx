@@ -56,7 +56,14 @@ export default function BottomTabNavigator() {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Alerts" component={AlertsScreen} />
+      <Tab.Screen
+        name="Alerts"
+        component={AlertsScreen}
+        options={{
+          title: 'Emergency',
+          tabBarLabel: 'Emergency',
+        }}
+      />
       <Tab.Screen name="Prediction" component={PredictionScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
