@@ -10,6 +10,7 @@ import {
   buildSmsLink,
   EMPTY_EMERGENCY_CONFIG,
   EmergencyConfig,
+  EmergencyContact,
   resolveEmergencyConfigFromAlert,
   subscribeToEmergencyConfig,
 } from '../services/emergencyConfigService';
@@ -18,12 +19,15 @@ import {
   getHospitalCoordinates,
   isSosVehicleAlert,
   subscribeToVehicleAlerts,
+  subscribeToVehicleReadings,
   VehicleRealtimeAlert,
+  VehicleRealtimeReading,
 } from '@/services/vehicleRealtimeService';
 import * as Linking from 'expo-linking';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 
 type AlertItem = {
   id: string;
@@ -81,12 +85,41 @@ async function openUrl(url: string) {
   }
 }
 
+function createGoogleEmbedUrl(latitude: number, longitude: number) {
+  return `https://maps.google.com/maps?q=${latitude},${longitude}&z=15&output=embed`;
+}
+
+function renderWebMapFrame(mapUrl: string) {
+  return React.createElement('iframe' as any, {
+    src: mapUrl,
+    style: {
+      width: '100%',
+      height: '220px',
+      border: '0',
+      display: 'block',
+    },
+    loading: 'lazy',
+    referrerPolicy: 'no-referrer-when-downgrade',
+  });
+}
+
 export default function AlertsScreen() {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [emergencyConfig, setEmergencyConfig] = useState<EmergencyConfig>(EMPTY_EMERGENCY_CONFIG);
   const [selectedAlert, setSelectedAlert] = useState<VehicleRealtimeAlert | null>(null);
+  const [latestReading, setLatestReading] = useState<VehicleRealtimeReading | null>(null);
+  const [emergencyNumberOverride, setEmergencyNumberOverride] = useState<string>('');
+  const [ambulanceNumberOverride, setAmbulanceNumberOverride] = useState<string>('');
+  const [contactsOverride, setContactsOverride] = useState<EmergencyContact[]>([]);
+  const [newContact, setNewContact] = useState<EmergencyContact>({
+    id: '',
+    name: '',
+    phone: '',
+    relationship: '',
+    whatsapp: '',
+  });
   const latestSos = alerts.find((item) => item.type === 'sos') ?? null;
 
   useEffect(() => {
@@ -102,12 +135,44 @@ export default function AlertsScreen() {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = subscribeToVehicleReadings((readings) => {
+      const lastGps = [...readings]
+        .reverse()
+        .find(
+          (reading) =>
+            typeof reading.gps_lat === 'number' &&
+            Number.isFinite(reading.gps_lat) &&
+            typeof reading.gps_lon === 'number' &&
+            Number.isFinite(reading.gps_lon)
+        );
+      setLatestReading(lastGps ?? null);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  // hydrate overrides from Firebase when available
+  useEffect(() => {
+    if (emergencyConfig.emergencyNumber && !emergencyNumberOverride) {
+      setEmergencyNumberOverride(emergencyConfig.emergencyNumber);
+    }
+    if (emergencyConfig.ambulanceNumber && !ambulanceNumberOverride) {
+      setAmbulanceNumberOverride(emergencyConfig.ambulanceNumber);
+    }
+    if (emergencyConfig.familyContacts.length && contactsOverride.length === 0) {
+      setContactsOverride(emergencyConfig.familyContacts);
+    }
+  }, [emergencyConfig, emergencyNumberOverride, ambulanceNumberOverride, contactsOverride.length]);
+
   const latestCoordinates = latestSos ? getAlertCoordinates(latestSos.raw) : null;
   const latestHospitalCoordinates = latestSos ? getHospitalCoordinates(latestSos.raw) : null;
   const resolvedEmergencyConfig = resolveEmergencyConfigFromAlert(emergencyConfig, latestSos?.raw);
-  const emergencyNumber = resolvedEmergencyConfig.emergencyNumber?.trim() || '';
-  const ambulanceNumber = resolvedEmergencyConfig.ambulanceNumber?.trim() || '';
-  const familyContacts = resolvedEmergencyConfig.familyContacts;
+  const firebaseEmergencyNumber = resolvedEmergencyConfig.emergencyNumber?.trim() || '';
+  const firebaseAmbulanceNumber = resolvedEmergencyConfig.ambulanceNumber?.trim() || '';
+  const emergencyNumber = (emergencyNumberOverride || '').trim() || firebaseEmergencyNumber;
+  const ambulanceNumber = (ambulanceNumberOverride || '').trim() || firebaseAmbulanceNumber;
+  const familyContacts = contactsOverride.length ? contactsOverride : resolvedEmergencyConfig.familyContacts;
   const hospitalPhone = resolvedEmergencyConfig.hospitalPhone?.trim() || '';
   const latestHospitalPhone = latestSos?.raw.hospital_phone?.trim() || hospitalPhone;
   const latestHospitalDistance =
@@ -126,6 +191,15 @@ export default function AlertsScreen() {
     latestCoordinates?.latitude,
     latestCoordinates?.longitude
   );
+  const liveLatitude = latestReading?.gps_lat;
+  const liveLongitude = latestReading?.gps_lon;
+  const hasLiveLocation =
+    typeof liveLatitude === 'number' &&
+    Number.isFinite(liveLatitude) &&
+    typeof liveLongitude === 'number' &&
+    Number.isFinite(liveLongitude);
+  const liveMapUrl = hasLiveLocation ? createGoogleEmbedUrl(liveLatitude, liveLongitude) : null;
+  const liveExternalMapUrl = hasLiveLocation ? buildGoogleMapsLink(liveLatitude!, liveLongitude!) : '';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -148,11 +222,25 @@ export default function AlertsScreen() {
           <View style={styles.valueGrid}>
             <View style={styles.valueCard}>
               <Text style={styles.valueLabel}>Emergency</Text>
-              <Text style={styles.valueText}>{emergencyNumber || 'Not found in Firebase'}</Text>
+              <TextInput
+                style={styles.input}
+                value={emergencyNumberOverride}
+                onChangeText={setEmergencyNumberOverride}
+                placeholder={firebaseEmergencyNumber || 'Not found in Firebase'}
+                placeholderTextColor={colors.icon}
+              />
+              <Text style={styles.helperText}>Used for call action below. Falls back to Firebase if left empty.</Text>
             </View>
             <View style={styles.valueCard}>
               <Text style={styles.valueLabel}>Ambulance</Text>
-              <Text style={styles.valueText}>{ambulanceNumber || 'Not found in Firebase'}</Text>
+              <TextInput
+                style={styles.input}
+                value={ambulanceNumberOverride}
+                onChangeText={setAmbulanceNumberOverride}
+                placeholder={firebaseAmbulanceNumber || 'Not found in Firebase'}
+                placeholderTextColor={colors.icon}
+              />
+              <Text style={styles.helperText}>Overrides the Firebase ambulance number locally.</Text>
             </View>
             <View style={styles.valueCard}>
               <Text style={styles.valueLabel}>Hospital</Text>
@@ -204,23 +292,139 @@ export default function AlertsScreen() {
             emergency contact.
           </Text>
           {familyContacts.length === 0 ? (
-            <Text style={styles.empty}>No guardian contacts found in Firebase</Text>
-          ) : (
-          familyContacts.map((contact, index) => (
+            <Text style={styles.empty}>No guardian contacts found in Firebase. Add one below.</Text>
+          ) : null}
+
+          {familyContacts.map((contact, index) => (
             <View key={contact.id} style={styles.contactCard}>
               <Text style={styles.contactTitle}>Contact {index + 1}</Text>
-              <Text style={styles.contactValue}>{contact.name}</Text>
-              <Text style={styles.contactMetaText}>{contact.relationship || 'Emergency contact'}</Text>
-              <Text style={styles.contactValue}>{contact.phone}</Text>
-              <Text style={styles.contactMetaText}>{contact.whatsapp || 'WhatsApp number not available'}</Text>
-              <View style={styles.inlineHintRow}>
-                <AppIcon name="call" size={14} color={colors.icon} />
-                <Text style={styles.inlineHint}>
-                  This contact came from realtime Firebase data.
-                </Text>
+              <TextInput
+                style={styles.input}
+                value={contact.name}
+                placeholder="Name"
+                placeholderTextColor={colors.icon}
+                onChangeText={(text) =>
+                  setContactsOverride((prev) =>
+                    prev.map((c) => (c.id === contact.id ? { ...c, name: text } : c))
+                  )
+                }
+              />
+              <TextInput
+                style={styles.input}
+                value={contact.relationship || ''}
+                placeholder="Relationship"
+                placeholderTextColor={colors.icon}
+                onChangeText={(text) =>
+                  setContactsOverride((prev) =>
+                    prev.map((c) => (c.id === contact.id ? { ...c, relationship: text } : c))
+                  )
+                }
+              />
+              <TextInput
+                style={styles.input}
+                value={contact.phone}
+                placeholder="Phone"
+                placeholderTextColor={colors.icon}
+                keyboardType="phone-pad"
+                onChangeText={(text) =>
+                  setContactsOverride((prev) =>
+                    prev.map((c) => (c.id === contact.id ? { ...c, phone: text } : c))
+                  )
+                }
+              />
+              <TextInput
+                style={styles.input}
+                value={contact.whatsapp || ''}
+                placeholder="WhatsApp (optional)"
+                placeholderTextColor={colors.icon}
+                keyboardType="phone-pad"
+                onChangeText={(text) =>
+                  setContactsOverride((prev) =>
+                    prev.map((c) => (c.id === contact.id ? { ...c, whatsapp: text } : c))
+                  )
+                }
+              />
+            </View>
+          ))}
+
+          <View style={styles.contactCard}>
+            <Text style={styles.contactTitle}>Add Guardian Contact</Text>
+            <TextInput
+              style={styles.input}
+              value={newContact.name}
+              placeholder="Name"
+              placeholderTextColor={colors.icon}
+              onChangeText={(text) => setNewContact((c) => ({ ...c, name: text }))}
+            />
+            <TextInput
+              style={styles.input}
+              value={newContact.relationship || ''}
+              placeholder="Relationship"
+              placeholderTextColor={colors.icon}
+              onChangeText={(text) => setNewContact((c) => ({ ...c, relationship: text }))}
+            />
+            <TextInput
+              style={styles.input}
+              value={newContact.phone}
+              placeholder="Phone"
+              placeholderTextColor={colors.icon}
+              keyboardType="phone-pad"
+              onChangeText={(text) => setNewContact((c) => ({ ...c, phone: text }))}
+            />
+            <TextInput
+              style={styles.input}
+              value={newContact.whatsapp || ''}
+              placeholder="WhatsApp (optional)"
+              placeholderTextColor={colors.icon}
+              keyboardType="phone-pad"
+              onChangeText={(text) => setNewContact((c) => ({ ...c, whatsapp: text }))}
+            />
+            <TouchableOpacity
+              style={[styles.addButton, !(newContact.name && newContact.phone) && styles.disabledCard]}
+              disabled={!(newContact.name && newContact.phone)}
+              onPress={() => {
+                const id = newContact.id || `contact-${Date.now()}`;
+                setContactsOverride((prev) => [...prev, { ...newContact, id }]);
+                setNewContact({ id: '', name: '', phone: '', relationship: '', whatsapp: '' });
+              }}
+            >
+              <Text style={styles.addButtonText}>Add Contact</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Live Emergency Location</Text>
+          <Text style={styles.sectionText}>
+            Pulling current GPS coordinates from Firebase at <Text style={styles.codeText}>Ai-based-smart-vehicle-health/readings</Text>.
+          </Text>
+          {hasLiveLocation ? (
+            <View style={styles.mapCard}>
+              {liveMapUrl && Platform.OS !== 'web' ? (
+                <WebView
+                  source={{ uri: liveMapUrl }}
+                  style={styles.map}
+                  scrollEnabled={false}
+                  nestedScrollEnabled={false}
+                  setSupportMultipleWindows={false}
+                />
+              ) : liveMapUrl ? (
+                renderWebMapFrame(liveMapUrl)
+              ) : null}
+              <View style={styles.mapMetaRow}>
+                <Text style={styles.mapMeta}>Lat: {liveLatitude?.toFixed(6)}</Text>
+                <Text style={styles.mapMeta}>Lon: {liveLongitude?.toFixed(6)}</Text>
+              </View>
+              <View style={styles.quickActionsRow}>
+                <TouchableOpacity style={styles.quickAction} onPress={() => openUrl(liveExternalMapUrl)}>
+                  <Text style={styles.quickActionTitle}>Open in Maps</Text>
+                  <Text style={styles.quickActionText}>Launch Google Maps with live pin</Text>
+                </TouchableOpacity>
               </View>
             </View>
-          )))}
+          ) : (
+            <Text style={styles.empty}>Waiting for GPS coordinates from Firebase readings…</Text>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -512,6 +716,20 @@ const createStyles = (colors: any) =>
       color: colors.icon,
       lineHeight: 18,
     },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: 10,
+      color: colors.text,
+      backgroundColor: colors.mutedSurface,
+      marginBottom: 8,
+    },
+    helperText: {
+      fontSize: 11,
+      color: colors.icon,
+      lineHeight: 16,
+    },
     contactCard: {
       backgroundColor: colors.mutedSurface,
       borderWidth: 1,
@@ -549,6 +767,18 @@ const createStyles = (colors: any) =>
       color: colors.icon,
       lineHeight: 17,
     },
+    addButton: {
+      backgroundColor: colors.tint,
+      paddingVertical: 10,
+      borderRadius: 10,
+      alignItems: 'center',
+      marginTop: 4,
+    },
+    addButtonText: {
+      color: '#fff',
+      fontWeight: '700',
+      fontSize: 13,
+    },
     workflowCard: {
       backgroundColor: colors.mutedSurface,
       borderWidth: 1,
@@ -562,6 +792,32 @@ const createStyles = (colors: any) =>
       color: colors.text,
       lineHeight: 20,
       marginBottom: 4,
+    },
+    mapCard: {
+      backgroundColor: colors.mutedSurface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      padding: 12,
+      marginTop: 8,
+    },
+    map: {
+      height: 220,
+      borderRadius: 12,
+      overflow: 'hidden',
+    },
+    mapMetaRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 8,
+    },
+    mapMeta: {
+      fontSize: 12,
+      color: colors.icon,
+    },
+    codeText: {
+      fontFamily: 'monospace',
+      color: colors.text,
     },
     empty: {
       fontSize: 13,
