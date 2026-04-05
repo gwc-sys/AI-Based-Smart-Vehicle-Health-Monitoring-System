@@ -18,7 +18,7 @@ export default function GlobalSosAlertModal() {
   const [deviceStatus, setDeviceStatus] = useState<VehicleRealtimeStatus | null>(null);
   const [visible, setVisible] = useState(false);
   const hasHydratedRef = useRef(false);
-  const seenSosIdsRef = useRef<Set<string>>(new Set());
+  const seenSosKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     requestPermissions().catch(() => undefined);
@@ -47,17 +47,22 @@ export default function GlobalSosAlertModal() {
     const unsubscribeAlerts = subscribeToVehicleAlerts((alerts) => {
       const sosAlerts = alerts.filter(isSosVehicleAlert);
       const nextSosAlert = sosAlerts[0] ?? null;
+      const sosKeys = sosAlerts
+        .map((alert) => `${alert.id ?? 'no-id'}|${alert.last_updated ?? alert.timestamp ?? 'no-time'}`);
       setLatestSosAlert(nextSosAlert);
 
       if (!hasHydratedRef.current) {
-        seenSosIdsRef.current = new Set(sosAlerts.map((alert) => alert.id).filter(Boolean) as string[]);
+        seenSosKeysRef.current = new Set(sosKeys);
         hasHydratedRef.current = true;
         return;
       }
 
-      const newSosAlert = sosAlerts.find((alert) => alert.id && !seenSosIdsRef.current.has(alert.id));
+      const newSosAlert = sosAlerts.find((alert) => {
+        const key = `${alert.id ?? 'no-id'}|${alert.last_updated ?? alert.timestamp ?? 'no-time'}`;
+        return !seenSosKeysRef.current.has(key);
+      });
 
-      seenSosIdsRef.current = new Set(sosAlerts.map((alert) => alert.id).filter(Boolean) as string[]);
+      seenSosKeysRef.current = new Set(sosKeys);
 
       if (newSosAlert) {
         setLatestSosAlert(newSosAlert);

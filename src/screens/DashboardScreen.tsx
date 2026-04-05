@@ -644,6 +644,8 @@ export default function DashboardScreen() {
   const [selectedSensorId, setSelectedSensorId] = useState<(typeof SENSOR_ORDER)[number]>('accelerometer');
   const [isSensorModalVisible, setIsSensorModalVisible] = useState(false);
   const [isSosModalVisible, setIsSosModalVisible] = useState(false);
+  const lastSosIdRef = React.useRef<string | null>(null);
+  const sosHydratedRef = React.useRef(false);
   const [maintenanceEntries, setMaintenanceEntries] = useState<MaintenanceRecord[]>(defaultMaintenanceRecords);
   const [isMaintenanceModalVisible, setIsMaintenanceModalVisible] = useState(false);
   const [maintenanceForm, setMaintenanceForm] = useState<MaintenanceFormState>({
@@ -664,7 +666,29 @@ export default function DashboardScreen() {
   useEffect(() => {
     const unsubscribeReadings = subscribeToVehicleReadings(setRealtimeReadings);
     const unsubscribeStatus = subscribeToVehicleStatus(setDeviceStatus);
-    const unsubscribeAlerts = subscribeToVehicleAlerts(setRealtimeAlerts);
+    const unsubscribeAlerts = subscribeToVehicleAlerts((alerts) => {
+      setRealtimeAlerts(alerts);
+
+      const nextSosAlert = alerts.find(isSosVehicleAlert) ?? null;
+      const nextSosKey = nextSosAlert
+        ? `${nextSosAlert.id ?? 'no-id'}|${nextSosAlert.last_updated ?? nextSosAlert.timestamp ?? 'no-time'}`
+        : null;
+
+      // First stabilized snapshot is baseline only; do not show stale SOS from previous sessions.
+      if (!sosHydratedRef.current) {
+        lastSosIdRef.current = nextSosKey;
+        sosHydratedRef.current = true;
+        return;
+      }
+
+      if (nextSosKey && nextSosKey !== lastSosIdRef.current) {
+        setIsSosModalVisible(true);
+      } else if (!nextSosKey) {
+        setIsSosModalVisible(false);
+      }
+
+      lastSosIdRef.current = nextSosKey;
+    });
 
     return () => {
       unsubscribeReadings();

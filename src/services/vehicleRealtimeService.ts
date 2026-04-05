@@ -659,8 +659,16 @@ export function subscribeToVehicleAlerts(
 
   let nodeAlerts: VehicleRealtimeAlert[] = [];
   let currentEmergencyAlerts: VehicleRealtimeAlert[] = [];
+  let hasNodeSnapshot = false;
+  let hasCurrentEmergencySnapshot = false;
+  let hasFallbackEmergencySnapshot = false;
 
   const emitCombinedAlerts = () => {
+    // Wait for initial snapshots from all listeners so startup does not emit partial batches.
+    if (!hasNodeSnapshot || !hasCurrentEmergencySnapshot || !hasFallbackEmergencySnapshot) {
+      return;
+    }
+
     callback(combineAlertSources(currentEmergencyAlerts, nodeAlerts));
   };
 
@@ -669,6 +677,7 @@ export function subscribeToVehicleAlerts(
       (snapshot.val() as Record<string, VehicleRealtimeAlert> | null) ?? null,
       Date.now()
     );
+    hasNodeSnapshot = true;
     emitCombinedAlerts();
   });
 
@@ -678,6 +687,7 @@ export function subscribeToVehicleAlerts(
       Date.now(),
       `${DATABASE_ROOT}/emergency_response/current`
     );
+    hasCurrentEmergencySnapshot = true;
     emitCombinedAlerts();
   });
 
@@ -689,6 +699,7 @@ export function subscribeToVehicleAlerts(
     );
 
     currentEmergencyAlerts = fallbackAlerts.length > 0 ? fallbackAlerts : currentEmergencyAlerts;
+    hasFallbackEmergencySnapshot = true;
     emitCombinedAlerts();
   });
 
