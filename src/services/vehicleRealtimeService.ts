@@ -58,6 +58,7 @@ export type VehicleRealtimeAlert = {
   hospital_map_url?: string;
   hospital_name?: string;
   hospital_phone?: string;
+  aiHospital?: HospitalAiRecommendation;
   latitude?: number;
   last_known_latitude?: number;
   last_known_longitude?: number;
@@ -74,6 +75,24 @@ export type VehicleRealtimeAlert = {
   timestamp?: number;
   trigger_source?: string;
   type?: string;
+};
+
+export type HospitalAiRecommendation = {
+  name?: string;
+  address?: string;
+  distance_km?: number;
+  emergency_available?: boolean;
+  facility_type?: string;
+  open_now?: boolean;
+  phone?: string;
+  map_url?: string;
+  website?: string;
+  reason?: string;
+  ui_card_title?: string;
+  ui_card_subtitle?: string;
+  selected_at?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 const DATABASE_ROOT = 'Ai-based-smart-vehicle-health';
@@ -212,6 +231,33 @@ function normalizeVehicleReading(reading: VehicleRealtimeReading): VehicleRealti
   };
 }
 
+function normalizeHospitalAi(raw: Record<string, unknown> | null): HospitalAiRecommendation | undefined {
+  if (!raw) {
+    return undefined;
+  }
+
+  const hospital = {
+    name: readStringField(raw, 'hospital_name', 'name', 'ui_card_title'),
+    address: readStringField(raw, 'address'),
+    distance_km: readNumberField(raw, 'distance_km', 'hospital_distance_km', 'distanceKm'),
+    emergency_available: readBooleanField(raw, 'emergency_available', 'hospital_emergency_available'),
+    facility_type: readStringField(raw, 'facility_type', 'type'),
+    open_now: readBooleanField(raw, 'open_now'),
+    phone: readStringField(raw, 'phone', 'hospital_phone'),
+    map_url: readStringField(raw, 'map_url', 'hospital_map_url'),
+    website: readStringField(raw, 'website'),
+    reason: readStringField(raw, 'reason'),
+    ui_card_title: readStringField(raw, 'ui_card_title'),
+    ui_card_subtitle: readStringField(raw, 'ui_card_subtitle'),
+    selected_at: readStringField(raw, 'selected_at'),
+    latitude: readNumberField(raw, 'latitude', 'hospital_latitude'),
+    longitude: readNumberField(raw, 'longitude', 'hospital_longitude'),
+  };
+
+  const hasCoreFields = hospital.name || hospital.address || hospital.map_url;
+  return hasCoreFields ? hospital : undefined;
+}
+
 function normalizeVehicleAlert(alert: VehicleRealtimeAlert): VehicleRealtimeAlert {
   const rawAlert = alert as Record<string, unknown>;
   const rawSosAlert = toObjectRecord(rawAlert.sos_alert);
@@ -225,6 +271,7 @@ function normalizeVehicleAlert(alert: VehicleRealtimeAlert): VehicleRealtimeAler
     toObjectRecord(rawAlert.nearest_hospital) ??
     toObjectRecord(rawAlert.hospital_ai) ??
     toObjectRecord(rawAiResults?.hospital_ai);
+  const aiHospital = normalizeHospitalAi(rawHospital);
 
   return {
     ...alert,
@@ -297,6 +344,7 @@ function normalizeVehicleAlert(alert: VehicleRealtimeAlert): VehicleRealtimeAler
     hospital_phone:
       readStringField(rawAlert, 'hospital_phone', 'hospitalPhone') ??
       readStringField(rawHospital ?? {}, 'phone', 'hospital_phone'),
+    aiHospital,
     latitude:
       readNumberField(rawAlert, 'latitude', 'gps_lat', 'lat', 'gpsLatitude') ??
       readNumberField(rawSosAlert ?? {}, 'latitude', 'gps_lat', 'lat', 'gpsLatitude') ??

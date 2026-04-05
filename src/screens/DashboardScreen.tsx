@@ -5,6 +5,7 @@ import SosAlertModal from '@/components/SosAlertModal';
 import useAuth from '@/hooks/useAuth';
 import { useVehicleData } from '@/hooks/useVehicleData';
 import {
+  HospitalAiRecommendation,
   isSosVehicleAlert,
   subscribeToVehicleAlerts,
   subscribeToVehicleReadings,
@@ -13,10 +14,12 @@ import {
   VehicleRealtimeReading,
   VehicleRealtimeStatus,
 } from '@/services/vehicleRealtimeService';
+import { buildCallLink, buildDirectionsLink, buildGoogleMapsLink } from '@/services/emergencyConfigService';
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
+  Linking,
   Modal,
   ScrollView,
   StyleSheet,
@@ -715,6 +718,13 @@ export default function DashboardScreen() {
         ) ?? null,
     [realtimeReadings]
   );
+  const latestAiAlert = useMemo(() => {
+    const current = realtimeAlerts.find((alert) => alert.fromCurrentEmergency);
+    if (current) return current;
+    const sos = realtimeAlerts.find((alert) => isSosVehicleAlert(alert));
+    if (sos) return sos;
+    return realtimeAlerts[0] ?? null;
+  }, [realtimeAlerts]);
   const heartRateValid = Boolean(latestHeartReading?.heart_rate_valid);
   const spo2Valid = Boolean(latestSpo2Reading?.spo2_valid);
   const heartRateRawValue = latestHeartReading?.heart_rate_bpm;
@@ -740,6 +750,59 @@ export default function DashboardScreen() {
         ) ?? null,
     [realtimeReadings]
   );
+  const aiHospital = useMemo(() => {
+    if (!latestAiAlert) return null;
+    const source = latestAiAlert.aiHospital;
+    const fallback: HospitalAiRecommendation = {
+      name: latestAiAlert.hospital_name,
+      address: latestAiAlert.hospital_address,
+      distance_km: latestAiAlert.hospital_distance_km,
+      emergency_available: latestAiAlert.hospital_emergency_available,
+      phone: latestAiAlert.hospital_phone,
+      map_url: latestAiAlert.hospital_map_url,
+      latitude: latestAiAlert.hospital_latitude,
+      longitude: latestAiAlert.hospital_longitude,
+    };
+    const hasFallback =
+      fallback.name ||
+      fallback.address ||
+      typeof fallback.distance_km === 'number' ||
+      fallback.phone ||
+      fallback.map_url;
+    return source ?? (hasFallback ? fallback : null);
+  }, [latestAiAlert]);
+  const aiHeartRateDisplay =
+    typeof latestAiAlert?.heart_rate_bpm === 'number' && Number.isFinite(latestAiAlert.heart_rate_bpm)
+      ? `${latestAiAlert.heart_rate_bpm.toFixed(0)} bpm`
+      : '--';
+  const aiSpo2Display =
+    typeof latestAiAlert?.spo2 === 'number' && Number.isFinite(latestAiAlert.spo2)
+      ? `${latestAiAlert.spo2.toFixed(0)}%`
+      : '--';
+  const aiFingerDetected = latestAiAlert?.finger_detected;
+  const aiLastUpdatedLabel = formatLiveTimestamp(
+    latestAiAlert?.last_updated ?? latestAiAlert?.timestamp,
+    latestAiAlert?.receivedAt
+  );
+  const aiMapUrl =
+    aiHospital?.map_url ||
+    (typeof aiHospital?.latitude === 'number' &&
+    typeof aiHospital?.longitude === 'number'
+      ? buildGoogleMapsLink(aiHospital.latitude, aiHospital.longitude)
+      : undefined);
+  const aiDirectionsUrl =
+    typeof aiHospital?.latitude === 'number' &&
+    typeof aiHospital?.longitude === 'number' &&
+    typeof lastLocationReading?.gps_lat === 'number' &&
+    typeof lastLocationReading?.gps_lon === 'number'
+      ? buildDirectionsLink(
+          lastLocationReading.gps_lat,
+          lastLocationReading.gps_lon,
+          aiHospital.latitude,
+          aiHospital.longitude
+        )
+      : undefined;
+  const aiCallUrl = aiHospital?.phone ? buildCallLink(aiHospital.phone) : undefined;
 
   const registeredVehicle = vehicles?.[0] ?? null;
   const registeredVehicleName = registeredVehicle
@@ -971,6 +1034,17 @@ export default function DashboardScreen() {
   const selectedSensorChartConfig = {
     ...chartConfig,
     color: (opacity = 1) => hexToRgba(selectedSensor.accentColor, opacity),
+  };
+
+  const handleOpenLink = async (url?: string) => {
+    if (!url) return;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) return;
+      await Linking.openURL(url);
+    } catch {
+      // no-op
+    }
   };
 
   const handleOpenSensorDetails = (sensorId: (typeof SENSOR_ORDER)[number]) => {
@@ -1639,6 +1713,24 @@ function hexToRgba(hex: string, opacity: number) {
   const g = (bigint >> 8) & 255;
   const b = bigint & 255;
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
+function formatDateString(value?: string) {
+  if (!value) {
+    return 'Awaiting selection';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 const createStyles = (colors: any) =>

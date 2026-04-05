@@ -124,15 +124,9 @@ function formatLiveTimestamp(timestamp?: number, receivedAt?: number) {
   return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
 }
 
-function createMapUrl(latitude: number, longitude: number) {
-  const latitudeDelta = 0.01;
-  const longitudeDelta = 0.01;
-  const left = longitude - longitudeDelta;
-  const right = longitude + longitudeDelta;
-  const top = latitude + latitudeDelta;
-  const bottom = latitude - latitudeDelta;
-
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${left}%2C${bottom}%2C${right}%2C${top}&layer=mapnik&marker=${latitude}%2C${longitude}`;
+function createGoogleEmbedUrl(latitude: number, longitude: number) {
+  // Keyless Google embed keeps us away from the OSM iframe that shows the unwanted attribution banner.
+  return `https://maps.google.com/maps?q=${latitude},${longitude}&z=15&output=embed`;
 }
 
 function renderWebMapFrame(mapUrl: string) {
@@ -179,7 +173,12 @@ export default function SosAlertModal({
   const latitude = resolvedReading?.gps_lat;
   const longitude = resolvedReading?.gps_lon;
   const hasCoordinates = hasGpsCoordinates(resolvedReading);
-  const hospitalCoordinates = getHospitalCoordinates(alert);
+  const aiHospital = alert?.aiHospital;
+  const hospitalCoordinates =
+    getHospitalCoordinates(alert) ||
+    (typeof aiHospital?.latitude === 'number' && typeof aiHospital?.longitude === 'number'
+      ? { latitude: aiHospital.latitude, longitude: aiHospital.longitude }
+      : null);
 
   useEffect(() => {
     const unsubscribe = subscribeToEmergencyConfig(setEmergencyConfig);
@@ -210,21 +209,26 @@ export default function SosAlertModal({
     googleRouteEmbedUrl ||
     googlePlaceEmbedUrl ||
     (hasCoordinates && typeof latitude === 'number' && typeof longitude === 'number'
-      ? createMapUrl(latitude, longitude)
+      ? createGoogleEmbedUrl(latitude, longitude)
       : null);
   const emergencyMessage = buildEmergencyMessage(alert, latitude, longitude);
   const familyContacts = resolvedEmergencyConfig.familyContacts.filter((contact) => contact.phone.trim());
   const nearestHospitalLabel =
-    resolvedEmergencyConfig.hospitalName?.trim() || alert?.hospital_name?.trim() || 'Nearest hospital';
+    aiHospital?.name?.trim() ||
+    resolvedEmergencyConfig.hospitalName?.trim() ||
+    alert?.hospital_name?.trim() ||
+    'Nearest hospital';
   const emergencyNumber = resolvedEmergencyConfig.emergencyNumber?.trim() || '';
   const ambulanceNumber = resolvedEmergencyConfig.ambulanceNumber?.trim() || '';
-  const hospitalPhone = alert?.hospital_phone?.trim() || resolvedEmergencyConfig.hospitalPhone?.trim() || '';
+  const hospitalPhone =
+    aiHospital?.phone?.trim() || alert?.hospital_phone?.trim() || resolvedEmergencyConfig.hospitalPhone?.trim() || '';
   const externalMapUrl =
     alert?.map_url?.trim() ||
     (hasCoordinates && typeof latitude === 'number' && typeof longitude === 'number'
       ? buildGoogleMapsLink(latitude, longitude)
       : '');
   const hospitalMapUrl =
+    aiHospital?.map_url?.trim() ||
     alert?.hospital_map_url?.trim() ||
     (hospitalCoordinates
       ? buildGoogleMapsLink(hospitalCoordinates.latitude, hospitalCoordinates.longitude)
@@ -236,13 +240,19 @@ export default function SosAlertModal({
     hospitalCoordinates
       ? buildDirectionsLink(latitude, longitude, hospitalCoordinates.latitude, hospitalCoordinates.longitude)
       : '';
-  const hospitalAddress = alert?.hospital_address?.trim() || 'Address not available';
+  const hospitalAddress = aiHospital?.address?.trim() || alert?.hospital_address?.trim() || 'Address not available';
   const hospitalDistance =
-    typeof alert?.hospital_distance_km === 'number' && Number.isFinite(alert.hospital_distance_km)
+    typeof aiHospital?.distance_km === 'number' && Number.isFinite(aiHospital.distance_km)
+      ? `${aiHospital.distance_km.toFixed(3)} km`
+      : typeof alert?.hospital_distance_km === 'number' && Number.isFinite(alert.hospital_distance_km)
       ? `${alert.hospital_distance_km.toFixed(2)} km`
       : '--';
   const hospitalEmergencyAvailability =
-    typeof alert?.hospital_emergency_available === 'boolean'
+    typeof aiHospital?.emergency_available === 'boolean'
+      ? aiHospital.emergency_available
+        ? 'Available'
+        : 'Unavailable'
+      : typeof alert?.hospital_emergency_available === 'boolean'
       ? alert.hospital_emergency_available
         ? 'Available'
         : 'Unavailable'
