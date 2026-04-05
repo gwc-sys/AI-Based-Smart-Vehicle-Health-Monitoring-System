@@ -1,5 +1,6 @@
 import { requestPermissions, sendImmediateNotification } from '@/services/notificationService';
 import {
+  isSosVehicleAlert,
   subscribeToVehicleAlerts,
   subscribeToVehicleReadings,
   subscribeToVehicleStatus,
@@ -9,10 +10,6 @@ import {
 } from '@/services/vehicleRealtimeService';
 import React, { useEffect, useRef, useState } from 'react';
 import SosAlertModal from './SosAlertModal';
-
-function isSosAlert(alert: VehicleRealtimeAlert) {
-  return String(alert.type ?? '').toLowerCase() === 'sos';
-}
 
 export default function GlobalSosAlertModal() {
   const [latestSosAlert, setLatestSosAlert] = useState<VehicleRealtimeAlert | null>(null);
@@ -48,7 +45,7 @@ export default function GlobalSosAlertModal() {
     const unsubscribeStatus = subscribeToVehicleStatus(setDeviceStatus);
 
     const unsubscribeAlerts = subscribeToVehicleAlerts((alerts) => {
-      const sosAlerts = alerts.filter(isSosAlert);
+      const sosAlerts = alerts.filter(isSosVehicleAlert);
       const nextSosAlert = sosAlerts[0] ?? null;
       setLatestSosAlert(nextSosAlert);
 

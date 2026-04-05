@@ -5,6 +5,7 @@ import SosAlertModal from '@/components/SosAlertModal';
 import useAuth from '@/hooks/useAuth';
 import { useVehicleData } from '@/hooks/useVehicleData';
 import {
+  isSosVehicleAlert,
   subscribeToVehicleAlerts,
   subscribeToVehicleReadings,
   subscribeToVehicleStatus,
@@ -600,8 +601,9 @@ function formatChartAxisLabel(label: string, index: number, total: number) {
 
 function mapDashboardAlert(alert: VehicleRealtimeAlert): DashboardRealtimeAlert {
   const normalizedType = String(alert.type ?? 'info').toLowerCase();
+  const isSos = isSosVehicleAlert(alert);
   const level =
-    normalizedType === 'sos'
+    isSos
       ? 'critical'
       : normalizedType === 'vibration'
         ? 'warning'
@@ -612,14 +614,14 @@ function mapDashboardAlert(alert: VehicleRealtimeAlert): DashboardRealtimeAlert 
   return {
     id: alert.id ?? `${normalizedType}-${alert.timestamp ?? Date.now()}`,
     title:
-      normalizedType === 'sos'
+      isSos
         ? 'SOS Emergency'
         : normalizedType === 'vibration'
           ? 'Vibration Alert'
           : normalizedType.toUpperCase(),
-    message: alert.message ?? 'Vehicle alert received',
-    type: normalizedType,
-    deviceId: alert.device_id ?? 'Unknown device',
+    message: alert.message ?? alert.type ?? 'Vehicle alert received',
+    type: isSos ? 'sos' : normalizedType,
+    deviceId: alert.device_name ?? alert.device_id ?? 'Unknown device',
     receivedAt: alert.receivedAt,
     timestamp: alert.timestamp,
     level,

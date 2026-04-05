@@ -3,6 +3,7 @@ import SosAlertModal from '@/components/SosAlertModal';
 import { useAppTheme } from '@/context/ThemeContext';
 import {
   buildCallLink,
+  buildDirectionsLink,
   buildEmergencyMessage,
   buildGoogleMapsLink,
   buildHospitalSearchLink,
@@ -14,6 +15,8 @@ import {
 } from '../services/emergencyConfigService';
 import {
   getAlertCoordinates,
+  getHospitalCoordinates,
+  isSosVehicleAlert,
   subscribeToVehicleAlerts,
   VehicleRealtimeAlert,
 } from '@/services/vehicleRealtimeService';
@@ -51,16 +54,16 @@ function formatAlertTime(timestamp?: number) {
 
 function mapRealtimeAlert(alert: VehicleRealtimeAlert): AlertItem {
   const normalizedType = String(alert.type ?? 'info').toLowerCase();
-  const isSos = normalizedType === 'sos';
+  const isSos = isSosVehicleAlert(alert);
 
   return {
     id: alert.id ?? `${normalizedType}-${alert.timestamp ?? Date.now()}-${alert.message ?? 'alert'}`,
     title: isSos ? 'SOS Emergency Event' : normalizedType.toUpperCase(),
-    message: alert.message ?? 'Vehicle alert received',
+    message: alert.message ?? alert.type ?? 'Vehicle alert received',
     level: isSos ? 'critical' : normalizedType === 'warning' ? 'warning' : 'info',
     createdAt: formatAlertTime(alert.timestamp),
-    deviceId: alert.device_id ?? 'Unknown device',
-    type: normalizedType,
+    deviceId: alert.device_name ?? alert.device_id ?? 'Unknown device',
+    type: isSos ? 'sos' : normalizedType,
     raw: alert,
   };
 }
@@ -100,11 +103,24 @@ export default function AlertsScreen() {
   }, []);
 
   const latestCoordinates = latestSos ? getAlertCoordinates(latestSos.raw) : null;
+  const latestHospitalCoordinates = latestSos ? getHospitalCoordinates(latestSos.raw) : null;
   const resolvedEmergencyConfig = resolveEmergencyConfigFromAlert(emergencyConfig, latestSos?.raw);
   const emergencyNumber = resolvedEmergencyConfig.emergencyNumber?.trim() || '';
   const ambulanceNumber = resolvedEmergencyConfig.ambulanceNumber?.trim() || '';
   const familyContacts = resolvedEmergencyConfig.familyContacts;
   const hospitalPhone = resolvedEmergencyConfig.hospitalPhone?.trim() || '';
+  const latestHospitalPhone = latestSos?.raw.hospital_phone?.trim() || hospitalPhone;
+  const latestHospitalDistance =
+    typeof latestSos?.raw.hospital_distance_km === 'number' && Number.isFinite(latestSos.raw.hospital_distance_km)
+      ? `${latestSos.raw.hospital_distance_km.toFixed(2)} km`
+      : '--';
+  const latestHospitalAddress = latestSos?.raw.hospital_address?.trim() || 'Address not available';
+  const latestEmergencyAvailability =
+    typeof latestSos?.raw.hospital_emergency_available === 'boolean'
+      ? latestSos.raw.hospital_emergency_available
+        ? 'Available'
+        : 'Unavailable'
+      : '--';
   const latestMessage = buildEmergencyMessage(
     latestSos?.raw ?? null,
     latestCoordinates?.latitude,
@@ -143,6 +159,18 @@ export default function AlertsScreen() {
               <Text style={styles.valueText}>
                 {resolvedEmergencyConfig.hospitalName || latestSos?.raw.hospital_name || 'Not found in Firebase'}
               </Text>
+            </View>
+            <View style={styles.valueCard}>
+              <Text style={styles.valueLabel}>Hospital Distance</Text>
+              <Text style={styles.valueText}>{latestHospitalDistance}</Text>
+            </View>
+            <View style={styles.valueCard}>
+              <Text style={styles.valueLabel}>Emergency Available</Text>
+              <Text style={styles.valueText}>{latestEmergencyAvailability}</Text>
+            </View>
+            <View style={styles.valueCard}>
+              <Text style={styles.valueLabel}>Hospital Address</Text>
+              <Text style={styles.valueText}>{latestHospitalAddress}</Text>
             </View>
             <View style={styles.valueCard}>
               <Text style={styles.valueLabel}>Source Node</Text>
@@ -217,26 +245,38 @@ export default function AlertsScreen() {
                 <Text style={styles.quickActionText}>{latestSos.createdAt}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.quickAction, !latestCoordinates && styles.disabledCard]}
-                disabled={!latestCoordinates}
+                style={[
+                  styles.quickAction,
+                  !latestCoordinates && !latestHospitalCoordinates && styles.disabledCard,
+                ]}
+                disabled={!latestCoordinates && !latestHospitalCoordinates}
                 onPress={() =>
-                  latestCoordinates
-                    ? openUrl(buildHospitalSearchLink(latestCoordinates.latitude, latestCoordinates.longitude))
+                  latestCoordinates && latestHospitalCoordinates
+                    ? openUrl(
+                        buildDirectionsLink(
+                          latestCoordinates.latitude,
+                          latestCoordinates.longitude,
+                          latestHospitalCoordinates.latitude,
+                          latestHospitalCoordinates.longitude
+                        )
+                      )
+                    : latestCoordinates
+                      ? openUrl(buildHospitalSearchLink(latestCoordinates.latitude, latestCoordinates.longitude))
                     : undefined
                 }
               >
-                <Text style={styles.quickActionTitle}>Nearest Hospital</Text>
+                <Text style={styles.quickActionTitle}>Hospital Route</Text>
                 <Text style={styles.quickActionText}>
                   {latestSos.raw.hospital_name ?? 'Search near current location'}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.quickAction, !hospitalPhone && styles.disabledCard]}
-                disabled={!hospitalPhone}
-                onPress={() => (hospitalPhone ? openUrl(buildCallLink(hospitalPhone)) : undefined)}
+                style={[styles.quickAction, !latestHospitalPhone && styles.disabledCard]}
+                disabled={!latestHospitalPhone}
+                onPress={() => (latestHospitalPhone ? openUrl(buildCallLink(latestHospitalPhone)) : undefined)}
               >
                 <Text style={styles.quickActionTitle}>Call Hospital</Text>
-                <Text style={styles.quickActionText}>{hospitalPhone || 'Firebase hospital phone missing'}</Text>
+                <Text style={styles.quickActionText}>{latestHospitalPhone || 'Firebase hospital phone missing'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.quickAction, !latestCoordinates && styles.disabledCard]}
@@ -314,17 +354,27 @@ export default function AlertsScreen() {
                   <TouchableOpacity
                     style={[
                       styles.alertActionButton,
-                      !getAlertCoordinates(alert.raw) && styles.disabledCard,
+                      !getAlertCoordinates(alert.raw) && !getHospitalCoordinates(alert.raw) && styles.disabledCard,
                     ]}
-                    disabled={!getAlertCoordinates(alert.raw)}
+                    disabled={!getAlertCoordinates(alert.raw) && !getHospitalCoordinates(alert.raw)}
                     onPress={() => {
                       const coordinates = getAlertCoordinates(alert.raw);
-                      if (coordinates) {
+                      const hospitalCoordinates = getHospitalCoordinates(alert.raw);
+                      if (coordinates && hospitalCoordinates) {
+                        openUrl(
+                          buildDirectionsLink(
+                            coordinates.latitude,
+                            coordinates.longitude,
+                            hospitalCoordinates.latitude,
+                            hospitalCoordinates.longitude
+                          )
+                        );
+                      } else if (coordinates) {
                         openUrl(buildHospitalSearchLink(coordinates.latitude, coordinates.longitude));
                       }
                     }}
                   >
-                    <Text style={styles.alertActionText}>Hospital</Text>
+                    <Text style={styles.alertActionText}>Route</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.alertActionButton, !emergencyNumber && styles.disabledCard]}

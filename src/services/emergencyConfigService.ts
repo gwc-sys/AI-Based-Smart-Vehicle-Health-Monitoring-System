@@ -190,16 +190,17 @@ export function resolveEmergencyConfigFromAlert(
   config: EmergencyConfig,
   alert: VehicleRealtimeAlert | null | undefined
 ) {
-  const familyContacts = alert?.emergency_contact_phone
+  const alertEmergencyPhone = alert?.emergency_contact_phone?.trim();
+  const familyContacts = alertEmergencyPhone
     ? [
         {
           id: 'alert-emergency-contact',
-          name: alert.emergency_contact_name?.trim() || 'Emergency Contact',
-          phone: alert.emergency_contact_phone.trim(),
-          whatsapp: alert.emergency_contact_phone.trim(),
+          name: alert?.emergency_contact_name?.trim() || 'Emergency Contact',
+          phone: alertEmergencyPhone,
+          whatsapp: alertEmergencyPhone,
           relationship: 'Alert contact',
         },
-        ...config.familyContacts.filter((contact) => contact.phone !== alert.emergency_contact_phone.trim()),
+        ...config.familyContacts.filter((contact) => contact.phone !== alertEmergencyPhone),
       ]
     : config.familyContacts;
 
@@ -219,6 +220,15 @@ export function buildHospitalSearchLink(latitude: number, longitude: number) {
   return `https://www.google.com/maps/search/hospital/@${latitude},${longitude},15z`;
 }
 
+export function buildDirectionsLink(
+  originLatitude: number,
+  originLongitude: number,
+  destinationLatitude: number,
+  destinationLongitude: number
+) {
+  return `https://www.google.com/maps/dir/?api=1&origin=${originLatitude},${originLongitude}&destination=${destinationLatitude},${destinationLongitude}&travelmode=driving`;
+}
+
 export function buildEmergencyMessage(
   alert: VehicleRealtimeAlert | null,
   latitude?: number,
@@ -229,10 +239,14 @@ export function buildEmergencyMessage(
       ? ` Location: ${buildGoogleMapsLink(latitude, longitude)}`
       : '';
 
+  const personLine = alert?.device_name?.trim() ? ` Person: ${alert.device_name.trim()}.` : '';
   const deviceLine = alert?.device_id ? ` Device: ${alert.device_id}.` : '';
-  const sourceMessage = alert?.message?.trim() || 'SOS triggered from AI Vehicle Health Monitoring device.';
+  const sourceMessage =
+    alert?.message?.trim() ||
+    alert?.type?.trim() ||
+    'SOS triggered from AI Vehicle Health Monitoring device.';
 
-  return `${sourceMessage}${deviceLine}${locationLine}`.trim();
+  return `${sourceMessage}${personLine}${deviceLine}${locationLine}`.trim();
 }
 
 export function sanitizePhoneNumber(phone: string) {

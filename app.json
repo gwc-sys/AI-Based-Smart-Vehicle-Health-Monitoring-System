@@ -58,7 +58,8 @@
       "firebaseStorageBucket": "ai-based-smart-vehicle-h-b714b.firebasestorage.app",
       "firebaseMessagingSenderId": "414445888340",
       "firebaseAppId": "1:414445888340:web:bdff515ff0415d4a6b9ec1",
-      "apiUrl": "https://ai-based-smart-vehicle-h-b714b.firebaseapp.com/"
+      "apiUrl": "https://ai-based-smart-vehicle-h-b714b.firebaseapp.com/",
+      "googleMapsApiKey": ""
     }
   }
 }
