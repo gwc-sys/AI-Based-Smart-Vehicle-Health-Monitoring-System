@@ -22,8 +22,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 function formatLiveTimestamp(timestamp?: number, receivedAt?: number) {
-  const sourceTime =
-    typeof timestamp === 'number' && timestamp > 1000000000 ? timestamp : receivedAt;
+  const normalizedTimestamp =
+    typeof timestamp === 'number' && Number.isFinite(timestamp)
+      ? timestamp > 1000000000000
+        ? timestamp
+        : timestamp > 1000000000
+          ? timestamp * 1000
+          : undefined
+      : undefined;
+  const sourceTime = normalizedTimestamp ?? receivedAt;
 
   if (typeof sourceTime !== 'number') {
     return 'Waiting';

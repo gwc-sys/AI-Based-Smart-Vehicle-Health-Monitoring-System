@@ -96,6 +96,67 @@ export type HospitalAiRecommendation = {
 };
 
 const DATABASE_ROOT = 'Ai-based-smart-vehicle-health';
+const READING_STREAM_SLICE_SIZE = 12;
+const READING_CONTAINER_KEYS = new Set([
+  'readings',
+  'reading',
+  'sensor_readings',
+  'sensor_data',
+  'realtime_readings',
+]);
+const READING_SIGNAL_KEYS = [
+  'accel_total_g',
+  'accel_x',
+  'accel_y',
+  'accel_z',
+  'vibration',
+  'sound',
+  'light',
+  'temperature',
+  'heart_rate_bpm',
+  'oxygen_saturation_spo2',
+  'spo2',
+  'infrared_signal',
+  'motion_detected',
+  'tilt_detected',
+  'accident_detected',
+  'alarm',
+  'gps_lat',
+  'gps_lon',
+  'gpsLatitude',
+  'gpsLongitude',
+  'gpsAltitude',
+  'gpsSpeedKmh',
+  'gpsSatellites',
+  'heartRateBpm',
+  'heartRateValid',
+  'oxygenSaturationSpo2',
+  'spo2Valid',
+  'latitude',
+  'longitude',
+  'speed_kmh',
+  'speed',
+  'timestamp',
+];
+const READING_SOURCE_PATHS = [
+  `${DATABASE_ROOT}/readings`,
+  'readings',
+  `${DATABASE_ROOT}/devices`,
+  'devices',
+  `${DATABASE_ROOT}`,
+  '/',
+] as const;
+
+type ReadingSourcePath = (typeof READING_SOURCE_PATHS)[number];
+type ReadingSourceState = {
+  ready: boolean;
+  readings: VehicleRealtimeReading[];
+};
+
+type VehicleReadingsSubscriptionOptions = {
+  emitIntervalMs?: number;
+  emitImmediately?: boolean;
+};
 
 function toFiniteNumber(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -113,6 +174,24 @@ function toFiniteNumber(value: unknown) {
   }
 
   return undefined;
+}
+
+function normalizeEpochTimestamp(value: unknown) {
+  const numericValue = toFiniteNumber(value);
+
+  if (typeof numericValue !== 'number') {
+    return undefined;
+  }
+
+  if (numericValue > 1000000000000) {
+    return numericValue;
+  }
+
+  if (numericValue > 1000000000) {
+    return numericValue * 1000;
+  }
+
+  return numericValue;
 }
 
 function readNumberField(source: Record<string, unknown>, ...keys: string[]) {
@@ -186,15 +265,6 @@ function readStringField(source: Record<string, unknown>, ...keys: string[]) {
   return undefined;
 }
 
-function hasGpsCoordinates(reading: VehicleRealtimeReading | null | undefined) {
-  return (
-    typeof reading?.gps_lat === 'number' &&
-    Number.isFinite(reading.gps_lat) &&
-    typeof reading?.gps_lon === 'number' &&
-    Number.isFinite(reading.gps_lon)
-  );
-}
-
 function normalizeVehicleReading(reading: VehicleRealtimeReading): VehicleRealtimeReading {
   const rawReading = reading as Record<string, unknown>;
 
@@ -226,7 +296,7 @@ function normalizeVehicleReading(reading: VehicleRealtimeReading): VehicleRealti
     spo2_valid: readBooleanField(rawReading, 'spo2_valid', 'spo2Valid'),
     temperature: readNumberField(rawReading, 'temperature'),
     tilt_detected: readBooleanField(rawReading, 'tilt_detected'),
-    timestamp: readNumberField(rawReading, 'timestamp'),
+    timestamp: normalizeEpochTimestamp(rawReading.timestamp),
     vibration: readNumberField(rawReading, 'vibration'),
   };
 }
@@ -460,7 +530,7 @@ function normalizeVehicleStatus(status: VehicleRealtimeStatus | null): VehicleRe
 
   return {
     ...status,
-    timestamp: toFiniteNumber(status.timestamp),
+    timestamp: normalizeEpochTimestamp(status.timestamp),
   };
 }
 
@@ -469,7 +539,7 @@ function sortByTimestamp<T extends { timestamp?: number }>(items: T[]) {
 }
 
 function getAlertSortValue(alert: VehicleRealtimeAlert) {
-  const timestamp = alert.last_updated ?? alert.timestamp;
+  const timestamp = normalizeEpochTimestamp(alert.last_updated ?? alert.timestamp);
   if (typeof timestamp === 'number' && Number.isFinite(timestamp)) {
     return timestamp;
   }
@@ -556,10 +626,14 @@ function normalizeAlertCollection(
 ) {
   return Object.entries(value ?? {}).map(([id, alert]) => {
     const normalized = normalizeVehicleAlert(alert);
+    const normalizedTimestamp = normalizeEpochTimestamp(normalized.timestamp);
+    const normalizedLastUpdated = normalizeEpochTimestamp(normalized.last_updated);
 
     return {
       ...normalized,
       id: normalized.id ?? id,
+      timestamp: normalizedTimestamp,
+      last_updated: normalizedLastUpdated,
       receivedAt,
     };
   });
@@ -580,10 +654,66 @@ function normalizeCurrentEmergencyAlert(
     {
       ...normalized,
       id: normalized.id ?? fallbackId,
+      timestamp: normalizeEpochTimestamp(normalized.timestamp),
+      last_updated: normalizeEpochTimestamp(normalized.last_updated),
       fromCurrentEmergency: true,
       receivedAt,
     },
   ];
+}
+
+function isReadingContainerKey(key: string) {
+  return READING_CONTAINER_KEYS.has(key.trim().toLowerCase());
+}
+
+function hasReadingSignalFields(value: Record<string, unknown>) {
+  return READING_SIGNAL_KEYS.some((key) => value[key] !== undefined);
+}
+
+function toObject(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function normalizeReadingCollection(value: unknown) {
+  if (!value || typeof value !== 'object') {
+    return [] as VehicleRealtimeReading[];
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => toObject(item))
+      .filter((item): item is Record<string, unknown> => Boolean(item))
+      .filter(hasReadingSignalFields)
+      .map((item) => item as VehicleRealtimeReading);
+  }
+
+  const objectValue = value as Record<string, unknown>;
+
+  if (hasReadingSignalFields(objectValue)) {
+    return [objectValue as VehicleRealtimeReading];
+  }
+
+  return Object.values(objectValue)
+    .map((item) => toObject(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .filter(hasReadingSignalFields)
+    .map((item) => item as VehicleRealtimeReading);
+}
+
+function collectReadingCollectionsFromReadingsNode(node: unknown): VehicleRealtimeReading[][] {
+  if (!node || typeof node !== 'object') {
+    return [];
+  }
+
+  const localCollection = normalizeReadingCollection(node);
+  if (localCollection.length > 0) {
+    return [localCollection];
+  }
+
+  const objectNode = node as Record<string, unknown>;
+  return Object.values(objectNode).flatMap((value) => collectReadingCollectionsFromReadingsNode(value));
 }
 
 function collectReadingCollections(node: unknown): VehicleRealtimeReading[][] {
@@ -592,50 +722,191 @@ function collectReadingCollections(node: unknown): VehicleRealtimeReading[][] {
   }
 
   const objectNode = node as Record<string, unknown>;
-  const localReadings = objectNode.readings;
-  const nestedCollections = Object.values(objectNode).flatMap((value) => collectReadingCollections(value));
+  const nestedCollections: VehicleRealtimeReading[][] = [];
 
-  if (!localReadings || typeof localReadings !== 'object') {
-    return nestedCollections;
+  for (const [key, value] of Object.entries(objectNode)) {
+    if (isReadingContainerKey(key)) {
+      nestedCollections.push(...collectReadingCollectionsFromReadingsNode(value));
+      continue;
+    }
+
+    nestedCollections.push(...collectReadingCollections(value));
   }
 
-  return [[...(Object.values(localReadings) as VehicleRealtimeReading[])], ...nestedCollections];
+  return nestedCollections;
+}
+
+function normalizeReadingCollections(
+  readingCollections: VehicleRealtimeReading[][],
+  receivedAt: number
+) {
+  const normalizedCollections = readingCollections.flatMap((collection) =>
+    // Keep a recent slice from each device stream so lower-frequency health sensors
+    // are not pushed out by a noisier accelerometer stream.
+    sortByTimestamp(
+      collection.map((reading) => ({
+        ...normalizeVehicleReading(reading),
+        receivedAt,
+      }))
+    ).slice(-READING_STREAM_SLICE_SIZE)
+  );
+
+  return sortByTimestamp(normalizedCollections);
+}
+
+function isReadingsPath(path: ReadingSourcePath) {
+  const normalizedPath = path.toLowerCase();
+  return normalizedPath === 'readings' || normalizedPath.endsWith('/readings');
+}
+
+function extractReadingsFromSnapshotValue(
+  snapshotValue: unknown,
+  sourcePath: ReadingSourcePath,
+  receivedAt: number
+) {
+  const readingCollections = isReadingsPath(sourcePath)
+    ? collectReadingCollectionsFromReadingsNode(snapshotValue)
+    : collectReadingCollections(snapshotValue);
+
+  return normalizeReadingCollections(readingCollections, receivedAt);
+}
+
+function getLatestReadingSortValue(readings: VehicleRealtimeReading[]) {
+  if (readings.length === 0) {
+    return 0;
+  }
+
+  const lastReading = readings[readings.length - 1];
+  if (typeof lastReading.timestamp === 'number' && Number.isFinite(lastReading.timestamp)) {
+    return lastReading.timestamp;
+  }
+
+  if (typeof lastReading.receivedAt === 'number' && Number.isFinite(lastReading.receivedAt)) {
+    return lastReading.receivedAt;
+  }
+
+  return 0;
 }
 
 export function subscribeToVehicleReadings(
-  callback: (readings: VehicleRealtimeReading[]) => void
+  callback: (readings: VehicleRealtimeReading[]) => void,
+  options: VehicleReadingsSubscriptionOptions = {}
 ) {
+  const emitIntervalMs = Math.max(0, options.emitIntervalMs ?? 30000);
+  const emitImmediately = options.emitImmediately ?? true;
   const database = getDatabase(getFirebaseApp());
-  const readingsRef = ref(database, '/');
+  const sourceStates = READING_SOURCE_PATHS.reduce<Record<ReadingSourcePath, ReadingSourceState>>(
+    (accumulator, path) => {
+      accumulator[path] = { ready: false, readings: [] };
+      return accumulator;
+    },
+    {} as Record<ReadingSourcePath, ReadingSourceState>
+  );
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let lastEmittedAt = 0;
+  let pendingReadings: VehicleRealtimeReading[] | null = null;
 
-  return onValue(readingsRef, (snapshot) => {
-    const rootValue = snapshot.val() as Record<string, unknown> | null;
-    const receivedAt = Date.now();
-    const readingCollections = collectReadingCollections(rootValue).flatMap((collection) =>
-      // Keep a recent slice from each device stream so lower-frequency health sensors
-      // are not pushed out by a noisier accelerometer stream.
-      sortByTimestamp(
-        collection.map((reading) => ({
-          ...normalizeVehicleReading(reading),
-          receivedAt,
-        }))
-      ).slice(-12)
-    );
-    const normalizedReadings = sortByTimestamp(readingCollections);
-    const latestGpsReading = [...normalizedReadings].reverse().find(hasGpsCoordinates) ?? null;
-    const readings =
-      latestGpsReading &&
-      !normalizedReadings.some(
-        (reading) =>
-          reading.timestamp === latestGpsReading.timestamp &&
-          reading.gps_lat === latestGpsReading.gps_lat &&
-          reading.gps_lon === latestGpsReading.gps_lon
-      )
-        ? [...normalizedReadings, latestGpsReading]
-        : normalizedReadings;
+  const clearScheduledEmit = () => {
+    if (!timeoutId) {
+      return;
+    }
 
+    clearTimeout(timeoutId);
+    timeoutId = null;
+  };
+
+  const emitNow = (readings: VehicleRealtimeReading[]) => {
+    lastEmittedAt = Date.now();
+    pendingReadings = null;
     callback(readings);
+  };
+
+  const scheduleEmit = (readings: VehicleRealtimeReading[]) => {
+    if (emitIntervalMs <= 0) {
+      emitNow(readings);
+      return;
+    }
+
+    pendingReadings = readings;
+    const now = Date.now();
+
+    if (lastEmittedAt === 0 && emitImmediately) {
+      emitNow(readings);
+      return;
+    }
+
+    const elapsedSinceLastEmit = now - lastEmittedAt;
+    if (elapsedSinceLastEmit >= emitIntervalMs) {
+      emitNow(readings);
+      return;
+    }
+
+    if (timeoutId) {
+      return;
+    }
+
+    const delay = emitIntervalMs - elapsedSinceLastEmit;
+    timeoutId = setTimeout(() => {
+      timeoutId = null;
+      emitNow(pendingReadings ?? []);
+    }, delay);
+  };
+
+  const emitPreferredReadings = () => {
+    const hasAnyReadySource = READING_SOURCE_PATHS.some((path) => sourceStates[path].ready);
+    if (!hasAnyReadySource) {
+      return;
+    }
+
+    const preferredReadings = READING_SOURCE_PATHS
+      .map((path, index) => ({
+        index,
+        readings: sourceStates[path].readings,
+        sortValue: getLatestReadingSortValue(sourceStates[path].readings),
+      }))
+      .filter((entry) => entry.readings.length > 0)
+      .sort((left, right) => {
+        if (left.sortValue !== right.sortValue) {
+          return right.sortValue - left.sortValue;
+        }
+
+        return left.index - right.index;
+      })[0]?.readings ?? [];
+
+    scheduleEmit(preferredReadings);
+  };
+
+  const unsubscribers = READING_SOURCE_PATHS.map((path) => {
+    const sourceRef = ref(database, path);
+
+    return onValue(
+      sourceRef,
+      (snapshot) => {
+        sourceStates[path] = {
+          ready: true,
+          readings: extractReadingsFromSnapshotValue(snapshot.val(), path, Date.now()),
+        };
+
+        emitPreferredReadings();
+      },
+      (error) => {
+        console.warn(`[Realtime] Failed to read "${path}"`, error);
+        sourceStates[path] = {
+          ready: true,
+          readings: [],
+        };
+
+        emitPreferredReadings();
+      }
+    );
   });
+
+  return () => {
+    clearScheduledEmit();
+    for (const unsubscribe of unsubscribers) {
+      unsubscribe();
+    }
+  };
 }
 
 export function subscribeToVehicleStatus(
