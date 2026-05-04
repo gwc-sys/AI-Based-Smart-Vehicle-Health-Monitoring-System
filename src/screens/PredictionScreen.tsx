@@ -2,6 +2,7 @@ import { usePrediction } from '@/hooks/usePrediction';
 import { useVehicleData } from '@/hooks/useVehicleData';
 import { useAppTheme } from '@/context/ThemeContext';
 import {
+  getAlertCoordinates,
   HospitalAiRecommendation,
   subscribeToVehicleAlerts,
   VehicleRealtimeAlert,
@@ -132,12 +133,18 @@ export default function PredictionScreen() {
     typeof aiHospital?.longitude === 'number'
       ? buildGoogleMapsLink(aiHospital.latitude, aiHospital.longitude)
       : undefined);
+  const aiCoordinates = getAlertCoordinates(latestAiAlert);
   const aiDirectionsUrl =
     typeof aiHospital?.latitude === 'number' &&
     typeof aiHospital?.longitude === 'number' &&
-    typeof latestAiAlert?.latitude === 'number' &&
-    typeof latestAiAlert?.longitude === 'number'
-      ? buildDirectionsLink(latestAiAlert.latitude, latestAiAlert.longitude, aiHospital.latitude, aiHospital.longitude)
+    typeof aiCoordinates?.latitude === 'number' &&
+    typeof aiCoordinates?.longitude === 'number'
+      ? buildDirectionsLink(
+          aiCoordinates.latitude,
+          aiCoordinates.longitude,
+          aiHospital.latitude,
+          aiHospital.longitude
+        )
       : undefined;
   const aiCallUrl = aiHospital?.phone ? buildCallLink(aiHospital.phone) : undefined;
 

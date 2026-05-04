@@ -1,4 +1,4 @@
-import { getDatabase, onValue, ref } from 'firebase/database';
+import { get, getDatabase, onValue, ref } from 'firebase/database';
 import { getFirebaseApp } from '@/services/firebaseConfig';
 
 export type VehicleRealtimeReading = {
@@ -979,4 +979,37 @@ export function subscribeToVehicleAlerts(
     unsubscribeCurrentEmergency();
     unsubscribeFallbackCurrentEmergency();
   };
+}
+
+export async function getLatestSosAlert(deviceId?: string) {
+  const database = getDatabase(getFirebaseApp());
+  const candidatePaths = [
+    `${DATABASE_ROOT}/emergency_response/current`,
+    'emergency_response/current',
+  ];
+
+  for (const path of candidatePaths) {
+    const snapshot = await get(ref(database, path));
+    const value = snapshot.val();
+    if (!value || typeof value !== 'object') {
+      continue;
+    }
+
+    const alert = normalizeVehicleAlert(value as VehicleRealtimeAlert);
+    if (!isSosVehicleAlert(alert)) {
+      continue;
+    }
+
+    if (!deviceId || !alert.device_id || alert.device_id === deviceId) {
+      return alert;
+    }
+  }
+
+  const alertsSnapshot = await get(ref(database, 'alerts'));
+  const alertsValue = alertsSnapshot.val() as Record<string, VehicleRealtimeAlert> | null;
+  const alerts = normalizeAlertCollection(alertsValue, Date.now())
+    .filter((alert) => isSosVehicleAlert(alert))
+    .filter((alert) => !deviceId || !alert.device_id || alert.device_id === deviceId);
+
+  return alerts[0] ?? null;
 }

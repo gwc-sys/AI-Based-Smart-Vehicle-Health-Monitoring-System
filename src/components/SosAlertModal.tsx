@@ -1,87 +1,44 @@
+import Env from '@/config/env';
 import { useAppTheme } from '@/context/ThemeContext';
 import {
-  buildCallLink,
-  buildDirectionsLink,
-  buildEmergencyMessage,
-  buildGoogleMapsLink,
-  buildHospitalSearchLink,
-  buildSmsLink,
-  buildWhatsAppLink,
-  EMPTY_EMERGENCY_CONFIG,
-  EmergencyConfig,
-  resolveEmergencyConfigFromAlert,
-  subscribeToEmergencyConfig,
-} from '../services/emergencyConfigService';
-import Env from '@/config/env';
-import {
-  getAlertCoordinates,
-  getHospitalCoordinates,
-  VehicleRealtimeAlert,
-  VehicleRealtimeReading,
+    getAlertCoordinates,
+    getHospitalCoordinates,
+    VehicleRealtimeAlert,
+    VehicleRealtimeReading,
 } from '@/services/vehicleRealtimeService';
 import * as Linking from 'expo-linking';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
+import {
+    buildCallLink,
+    buildDirectionsLink,
+    buildEmergencyMessage,
+    buildGoogleMapsLink,
+    buildHospitalSearchLink,
+    buildSmsLink,
+    buildWhatsAppLink,
+    EmergencyConfig,
+    EMPTY_EMERGENCY_CONFIG,
+    resolveEmergencyConfigFromAlert,
+    subscribeToEmergencyConfig,
+} from '../services/emergencyConfigService';
 
 type SosAlertModalProps = {
   visible: boolean;
   onClose: () => void;
   alert: VehicleRealtimeAlert | null;
   reading: VehicleRealtimeReading | null;
-  fallbackLocationReading?: VehicleRealtimeReading | null;
   deviceId?: string | null;
 };
 
-function hasGpsCoordinates(reading: VehicleRealtimeReading | null | undefined) {
+function hasCoordinates(location: { latitude?: number; longitude?: number } | null) {
   return (
-    typeof reading?.gps_lat === 'number' &&
-    Number.isFinite(reading.gps_lat) &&
-    typeof reading?.gps_lon === 'number' &&
-    Number.isFinite(reading.gps_lon)
+    typeof location?.latitude === 'number' &&
+    Number.isFinite(location.latitude) &&
+    typeof location?.longitude === 'number' &&
+    Number.isFinite(location.longitude)
   );
-}
-
-function alertToReading(alert: VehicleRealtimeAlert | null): VehicleRealtimeReading | null {
-  if (!alert) {
-    return null;
-  }
-
-  const alertCoordinates = getAlertCoordinates(alert);
-
-  return {
-    gps_altitude: alert.gps_altitude,
-    gps_lat: alertCoordinates?.latitude,
-    gps_lon: alertCoordinates?.longitude,
-    gps_sats: alert.gps_sats ?? alert.satellites,
-    gps_speed_kmh: alert.gps_speed_kmh ?? alert.speed_kmh,
-    timestamp: alert.timestamp,
-  };
-}
-
-function resolveSosReading(
-  alert: VehicleRealtimeAlert | null,
-  reading: VehicleRealtimeReading | null,
-  fallbackLocationReading: VehicleRealtimeReading | null | undefined
-) {
-  const alertReading = alertToReading(alert);
-
-  if (hasGpsCoordinates(alertReading)) {
-    return {
-      ...reading,
-      ...alertReading,
-    };
-  }
-
-  if (hasGpsCoordinates(reading) || !hasGpsCoordinates(fallbackLocationReading)) {
-    return reading;
-  }
-
-  return {
-    ...reading,
-    gps_lat: fallbackLocationReading?.gps_lat,
-    gps_lon: fallbackLocationReading?.gps_lon,
-  };
 }
 
 function formatLiveTimestamp(timestamp?: number, receivedAt?: number) {
@@ -161,18 +118,17 @@ export default function SosAlertModal({
   onClose,
   alert,
   reading,
-  fallbackLocationReading,
   deviceId,
 }: SosAlertModalProps) {
   const { colors } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [emergencyConfig, setEmergencyConfig] = useState<EmergencyConfig>(EMPTY_EMERGENCY_CONFIG);
-  const resolvedReading = resolveSosReading(alert, reading, fallbackLocationReading);
+  const alertCoordinates = getAlertCoordinates(alert);
   const resolvedDeviceId = alert?.device_id ?? deviceId ?? 'Unknown device';
   const resolvedDisplayName = alert?.device_name?.trim() || resolvedDeviceId;
-  const latitude = resolvedReading?.gps_lat;
-  const longitude = resolvedReading?.gps_lon;
-  const hasCoordinates = hasGpsCoordinates(resolvedReading);
+  const latitude = alertCoordinates?.latitude;
+  const longitude = alertCoordinates?.longitude;
+  const hasLiveCoordinates = hasCoordinates(alertCoordinates);
   const aiHospital = alert?.aiHospital;
   const hospitalCoordinates =
     getHospitalCoordinates(alert) ||
@@ -192,7 +148,7 @@ export default function SosAlertModal({
   const googleMapsApiKey = Env.GOOGLE_MAPS_API_KEY?.trim();
   const canRenderGoogle =
     googleMapsApiKey &&
-    hasCoordinates &&
+    hasLiveCoordinates &&
     typeof latitude === 'number' &&
     typeof longitude === 'number';
 
@@ -208,57 +164,61 @@ export default function SosAlertModal({
   const mapUrl =
     googleRouteEmbedUrl ||
     googlePlaceEmbedUrl ||
-    (hasCoordinates && typeof latitude === 'number' && typeof longitude === 'number'
+    (hasLiveCoordinates && typeof latitude === 'number' && typeof longitude === 'number'
       ? createGoogleEmbedUrl(latitude, longitude)
       : null);
   const emergencyMessage = buildEmergencyMessage(alert, latitude, longitude);
   const familyContacts = resolvedEmergencyConfig.familyContacts.filter((contact) => contact.phone.trim());
   const nearestHospitalLabel =
+    alert?.hospital_name?.trim() ||
     aiHospital?.name?.trim() ||
     resolvedEmergencyConfig.hospitalName?.trim() ||
-    alert?.hospital_name?.trim() ||
     'Nearest hospital';
   const emergencyNumber = resolvedEmergencyConfig.emergencyNumber?.trim() || '';
   const ambulanceNumber = resolvedEmergencyConfig.ambulanceNumber?.trim() || '';
   const hospitalPhone =
-    aiHospital?.phone?.trim() || alert?.hospital_phone?.trim() || resolvedEmergencyConfig.hospitalPhone?.trim() || '';
+    alert?.hospital_phone?.trim() ||
+    aiHospital?.phone?.trim() ||
+    resolvedEmergencyConfig.hospitalPhone?.trim() ||
+    '';
   const externalMapUrl =
     alert?.map_url?.trim() ||
-    (hasCoordinates && typeof latitude === 'number' && typeof longitude === 'number'
+    (hasLiveCoordinates && typeof latitude === 'number' && typeof longitude === 'number'
       ? buildGoogleMapsLink(latitude, longitude)
       : '');
   const hospitalMapUrl =
-    aiHospital?.map_url?.trim() ||
     alert?.hospital_map_url?.trim() ||
+    aiHospital?.map_url?.trim() ||
     (hospitalCoordinates
       ? buildGoogleMapsLink(hospitalCoordinates.latitude, hospitalCoordinates.longitude)
       : '');
   const routeToHospitalUrl =
-    hasCoordinates &&
+    hasLiveCoordinates &&
     typeof latitude === 'number' &&
     typeof longitude === 'number' &&
     hospitalCoordinates
       ? buildDirectionsLink(latitude, longitude, hospitalCoordinates.latitude, hospitalCoordinates.longitude)
       : '';
-  const hospitalAddress = aiHospital?.address?.trim() || alert?.hospital_address?.trim() || 'Address not available';
+  const hospitalAddress =
+    alert?.hospital_address?.trim() || aiHospital?.address?.trim() || 'Address not available';
   const hospitalDistance =
-    typeof aiHospital?.distance_km === 'number' && Number.isFinite(aiHospital.distance_km)
-      ? `${aiHospital.distance_km.toFixed(3)} km`
-      : typeof alert?.hospital_distance_km === 'number' && Number.isFinite(alert.hospital_distance_km)
+    typeof alert?.hospital_distance_km === 'number' && Number.isFinite(alert.hospital_distance_km)
       ? `${alert.hospital_distance_km.toFixed(2)} km`
+      : typeof aiHospital?.distance_km === 'number' && Number.isFinite(aiHospital.distance_km)
+      ? `${aiHospital.distance_km.toFixed(3)} km`
       : '--';
   const hospitalEmergencyAvailability =
-    typeof aiHospital?.emergency_available === 'boolean'
-      ? aiHospital.emergency_available
-        ? 'Available'
-        : 'Unavailable'
-      : typeof alert?.hospital_emergency_available === 'boolean'
+    typeof alert?.hospital_emergency_available === 'boolean'
       ? alert.hospital_emergency_available
         ? 'Available'
         : 'Unavailable'
+      : typeof aiHospital?.emergency_available === 'boolean'
+      ? aiHospital.emergency_available
+        ? 'Available'
+        : 'Unavailable'
       : '--';
-  const emergencySpo2Value = alert?.spo2 ?? resolvedReading?.oxygen_saturation_spo2;
-  const emergencyHeartRateValue = alert?.heart_rate_bpm ?? resolvedReading?.heart_rate_bpm;
+  const emergencySpo2Value = alert?.spo2 ?? reading?.oxygen_saturation_spo2;
+  const emergencyHeartRateValue = alert?.heart_rate_bpm ?? reading?.heart_rate_bpm;
 
   return (
     <Modal visible={visible && Boolean(alert)} animationType="fade" transparent onRequestClose={onClose}>
@@ -342,7 +302,7 @@ export default function SosAlertModal({
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Live Emergency Location</Text>
               <Text style={styles.sectionHint}>
-                {hasCoordinates ? 'Latest SOS position from Firebase' : 'Waiting for GPS coordinates'}
+                {hasLiveCoordinates ? 'Latest SOS position from Firebase' : 'Waiting for SOS coordinates from Firebase'}
               </Text>
             </View>
 
@@ -361,8 +321,7 @@ export default function SosAlertModal({
                 <View style={styles.mapFallback}>
                   <Text style={styles.mapFallbackTitle}>Map unavailable</Text>
                   <Text style={styles.mapFallbackText}>
-                    Latitude and longitude are not available yet, so the app will fall back to the last
-                    known position when it arrives.
+                    Latitude and longitude are not available in the SOS alert yet.
                   </Text>
                 </View>
               )}
@@ -392,18 +351,18 @@ export default function SosAlertModal({
               <TouchableOpacity
                 style={[
                   styles.primaryActionCard,
-                  !routeToHospitalUrl && !hasCoordinates && styles.actionCardDisabled,
+                  !routeToHospitalUrl && !hasLiveCoordinates && styles.actionCardDisabled,
                 ]}
-                disabled={!routeToHospitalUrl && !hasCoordinates}
+                disabled={!routeToHospitalUrl && !hasLiveCoordinates}
                 onPress={() =>
                   routeToHospitalUrl
                     ? openUrl(routeToHospitalUrl)
-                    : hasCoordinates && latitude && longitude
+                    : hasLiveCoordinates && latitude && longitude
                       ? openUrl(buildHospitalSearchLink(latitude, longitude))
-                    : undefined
+                      : undefined
                 }
               >
-                <Text style={styles.primaryActionTitle}>Route To Hospital</Text>
+                <Text style={styles.primaryActionTitle}>Route SOS Location to Hospital</Text>
                 <Text style={styles.primaryActionText}>
                   {hospitalCoordinates ? nearestHospitalLabel : 'Search hospital near current location'}
                 </Text>

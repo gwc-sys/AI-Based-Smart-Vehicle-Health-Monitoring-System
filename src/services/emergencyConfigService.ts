@@ -1,6 +1,6 @@
-import { getDatabase, onValue, ref } from 'firebase/database';
 import { getFirebaseApp } from '@/services/firebaseConfig';
 import { VehicleRealtimeAlert } from '@/services/vehicleRealtimeService';
+import { get, getDatabase, onValue, ref, set } from 'firebase/database';
 
 const DATABASE_ROOT = 'Ai-based-smart-vehicle-health';
 
@@ -69,10 +69,19 @@ function normalizeContacts(value: unknown) {
   }
 
   if (value && typeof value === 'object') {
-    return Object.values(value)
-      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-      .map((contact, index) => normalizeContact(contact, index))
-      .filter((contact) => contact.phone);
+    const objectValue = value as Record<string, unknown>;
+    const nestedObjects = Object.values(objectValue).filter(
+      (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object'
+    );
+
+    if (nestedObjects.length > 0) {
+      return nestedObjects
+        .map((contact, index) => normalizeContact(contact, index))
+        .filter((contact) => contact.phone);
+    }
+
+    const singleContact = normalizeContact(objectValue, 0);
+    return singleContact.phone ? [singleContact] : [];
   }
 
   return [];
@@ -184,6 +193,68 @@ export function subscribeToEmergencyConfig(callback: (config: EmergencyConfig) =
 
     callback(EMPTY_EMERGENCY_CONFIG);
   });
+}
+
+export async function saveEmergencyConfig(config: EmergencyConfig) {
+  const database = getDatabase(getFirebaseApp());
+  const emergencyConfigRef = ref(database, `${DATABASE_ROOT}/emergencyConfig`);
+
+  const sanitizedContacts = config.familyContacts
+    .filter((contact) => contact.phone?.trim())
+    .map((contact) => {
+      const trimmedPhone = contact.phone?.trim();
+      const trimmedName = contact.name?.trim();
+      const trimmedWhatsapp = contact.whatsapp?.trim();
+      const trimmedRelationship = contact.relationship?.trim();
+
+      return {
+        ...(contact.id?.trim() ? { id: contact.id.trim() } : {}),
+        ...(trimmedName ? { name: trimmedName } : {}),
+        ...(trimmedPhone ? { phone: trimmedPhone } : {}),
+        ...(trimmedWhatsapp ? { whatsapp: trimmedWhatsapp } : {}),
+        ...(trimmedRelationship ? { relationship: trimmedRelationship } : {}),
+      };
+    });
+
+  const payload = {
+    emergencyNumber: config.emergencyNumber?.trim() || '',
+    ambulanceNumber: config.ambulanceNumber?.trim() || '',
+    hospitalName: config.hospitalName?.trim() || '',
+    hospitalPhone: config.hospitalPhone?.trim() || '',
+    sosConfirmationHint: config.sosConfirmationHint?.trim() || '',
+    familyContacts: sanitizedContacts,
+  };
+
+  await set(emergencyConfigRef, payload);
+  return payload;
+}
+
+export async function getEmergencyContacts(_userId?: string) {
+  const database = getDatabase(getFirebaseApp());
+  const candidatePaths = [
+    `${DATABASE_ROOT}/emergencyConfig`,
+    `${DATABASE_ROOT}/emergency`,
+    `${DATABASE_ROOT}/sos`,
+    'emergencyConfig',
+    'emergency',
+    'sos',
+  ];
+
+  for (const path of candidatePaths) {
+    const snapshot = await get(ref(database, path));
+    const rawConfig = snapshot.val();
+
+    if (!rawConfig || typeof rawConfig !== 'object') {
+      continue;
+    }
+
+    const config = normalizeEmergencyConfig(rawConfig as Record<string, unknown>, path);
+    if (config.familyContacts.length > 0) {
+      return config.familyContacts;
+    }
+  }
+
+  return [];
 }
 
 export function resolveEmergencyConfigFromAlert(

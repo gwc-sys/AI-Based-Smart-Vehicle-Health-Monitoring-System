@@ -1,32 +1,32 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAppTheme } from '@/context/ThemeContext';
 import SensorCard from '@/components/SensorCard';
 import SosAlertModal from '@/components/SosAlertModal';
+import { useAppTheme } from '@/context/ThemeContext';
 import useAuth from '@/hooks/useAuth';
 import { useVehicleData } from '@/hooks/useVehicleData';
-import {
-  HospitalAiRecommendation,
-  isSosVehicleAlert,
-  subscribeToVehicleAlerts,
-  subscribeToVehicleReadings,
-  subscribeToVehicleStatus,
-  VehicleRealtimeAlert,
-  VehicleRealtimeReading,
-  VehicleRealtimeStatus,
-} from '@/services/vehicleRealtimeService';
 import { buildCallLink, buildDirectionsLink, buildGoogleMapsLink } from '@/services/emergencyConfigService';
+import {
+    HospitalAiRecommendation,
+    isSosVehicleAlert,
+    subscribeToVehicleAlerts,
+    subscribeToVehicleReadings,
+    subscribeToVehicleStatus,
+    VehicleRealtimeAlert,
+    VehicleRealtimeReading,
+    VehicleRealtimeStatus,
+} from '@/services/vehicleRealtimeService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Dimensions,
-  Linking,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Dimensions,
+    Linking,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { BarChart, LineChart, PieChart } from 'react-native-chart-kit';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -688,9 +688,9 @@ export default function DashboardScreen() {
         return;
       }
 
-      if (nextSosKey && nextSosKey !== lastSosIdRef.current) {
-        setIsSosModalVisible(true);
-      } else if (!nextSosKey) {
+      // Global SOS modal already handles new SOS event popups.
+      // Keep local modal for manual opening from the dashboard banner only.
+      if (!nextSosKey) {
         setIsSosModalVisible(false);
       }
 
@@ -1274,7 +1274,6 @@ export default function DashboardScreen() {
         onClose={() => setIsSosModalVisible(false)}
         alert={latestSosAlert}
         reading={latestRealtimeReading ?? null}
-        fallbackLocationReading={lastLocationReading}
         deviceId={deviceStatus?.device_id ?? null}
       />
 

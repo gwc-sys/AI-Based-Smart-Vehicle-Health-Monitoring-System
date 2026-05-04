@@ -1,29 +1,29 @@
 import SosAlertModal from '@/components/SosAlertModal';
 import { useAppTheme } from '@/context/ThemeContext';
 import {
-  buildCallLink,
-  buildDirectionsLink,
-  buildEmergencyMessage,
-  buildGoogleMapsLink,
-  buildHospitalSearchLink,
-  buildSmsLink,
-  EMPTY_EMERGENCY_CONFIG,
-  EmergencyConfig,
-  resolveEmergencyConfigFromAlert,
-  subscribeToEmergencyConfig,
+    buildCallLink,
+    buildDirectionsLink,
+    buildGoogleMapsLink,
+    buildHospitalSearchLink,
+    EmergencyConfig,
+    EmergencyContact,
+    EMPTY_EMERGENCY_CONFIG,
+    resolveEmergencyConfigFromAlert,
+    saveEmergencyConfig,
+    subscribeToEmergencyConfig
 } from '@/services/emergencyConfigService';
 import {
-  getAlertCoordinates,
-  getHospitalCoordinates,
-  isSosVehicleAlert,
-  subscribeToVehicleAlerts,
-  subscribeToVehicleReadings,
-  VehicleRealtimeAlert,
-  VehicleRealtimeReading,
+    getAlertCoordinates,
+    getHospitalCoordinates,
+    isSosVehicleAlert,
+    subscribeToVehicleAlerts,
+    subscribeToVehicleReadings,
+    VehicleRealtimeAlert,
+    VehicleRealtimeReading,
 } from '@/services/vehicleRealtimeService';
 import * as Linking from 'expo-linking';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
@@ -70,6 +70,28 @@ function mapRealtimeAlert(alert: VehicleRealtimeAlert): AlertItem {
   };
 }
 
+function buildContactDrafts(contacts: EmergencyContact[]) {
+  const drafts = contacts.slice(0, 5).map((contact, index) => ({
+    id: contact.id || `contact-${index + 1}`,
+    name: contact.name?.trim() || '',
+    phone: contact.phone?.trim() || '',
+    whatsapp: contact.whatsapp?.trim() || '',
+    relationship: contact.relationship?.trim() || '',
+  }));
+
+  while (drafts.length < 5) {
+    drafts.push({
+      id: `contact-${drafts.length + 1}`,
+      name: '',
+      phone: '',
+      whatsapp: '',
+      relationship: '',
+    });
+  }
+
+  return drafts;
+}
+
 async function openUrl(url: string) {
   try {
     const supported = await Linking.canOpenURL(url);
@@ -106,6 +128,10 @@ export default function AlertsScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [emergencyConfig, setEmergencyConfig] = useState<EmergencyConfig>(EMPTY_EMERGENCY_CONFIG);
+  const [contactDrafts, setContactDrafts] = useState<EmergencyContact[]>([]);
+  const [isSavingContacts, setIsSavingContacts] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [showContactsModal, setShowContactsModal] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<VehicleRealtimeAlert | null>(null);
   const [latestReading, setLatestReading] = useState<VehicleRealtimeReading | null>(null);
   const latestSos = alerts.find((item) => item.type === 'sos') ?? null;
@@ -140,12 +166,72 @@ export default function AlertsScreen() {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    setContactDrafts(buildContactDrafts(emergencyConfig.familyContacts));
+  }, [emergencyConfig.familyContacts]);
+
+  function updateContactDraft(index: number, field: keyof EmergencyContact, value: string) {
+    setContactDrafts((current) =>
+      current.map((contact, idx) =>
+        idx === index
+          ? {
+              ...contact,
+              [field]: value,
+            }
+          : contact
+      )
+    );
+    setSaveStatus(null);
+  }
+
+  async function handleSaveContacts() {
+    const contactList = contactDrafts.slice(0, 5).map((contact) => ({
+      ...contact,
+      name: contact.name.trim(),
+      phone: contact.phone.trim(),
+      relationship: contact.relationship?.trim() ?? '',
+      whatsapp: contact.whatsapp?.trim() ?? '',
+    }));
+
+    const hasPartialEntry = contactList.some(
+      (contact) => (contact.name && !contact.phone) || (!contact.name && contact.phone)
+    );
+    if (hasPartialEntry) {
+      Alert.alert('Save Failed', 'Each contact needs both name and phone, or keep both fields empty.');
+      return;
+    }
+
+    setIsSavingContacts(true);
+    setSaveStatus(null);
+
+    try {
+      const validContacts = contactList.filter((contact) => contact.name && contact.phone);
+      if (validContacts.length === 0) {
+        Alert.alert('Save Failed', 'Add at least one complete guardian contact.');
+        return;
+      }
+
+      await saveEmergencyConfig({
+        ...emergencyConfig,
+        familyContacts: validContacts,
+      });
+      setSaveStatus(`Saved ${validContacts.length} contacts to Firebase.`);
+      setShowContactsModal(false);
+    } catch (error) {
+      console.error('Unable to save guardian contacts', error);
+      Alert.alert('Save Failed', 'Unable to save guardian contacts. Please try again.');
+      setSaveStatus('Unable to save guardian contacts.');
+    } finally {
+      setIsSavingContacts(false);
+    }
+  }
+
   const latestCoordinates = latestSos ? getAlertCoordinates(latestSos.raw) : null;
   const latestHospitalCoordinates = latestSos ? getHospitalCoordinates(latestSos.raw) : null;
   const resolvedEmergencyConfig = resolveEmergencyConfigFromAlert(emergencyConfig, latestSos?.raw);
   const emergencyNumber = resolvedEmergencyConfig.emergencyNumber?.trim() || '';
   const ambulanceNumber = resolvedEmergencyConfig.ambulanceNumber?.trim() || '';
-  const familyContacts = resolvedEmergencyConfig.familyContacts;
+  const configuredContacts = contactDrafts.filter((contact) => contact.name && contact.phone);
   const hospitalPhone = resolvedEmergencyConfig.hospitalPhone?.trim() || '';
   const latestHospitalPhone = latestSos?.raw.hospital_phone?.trim() || hospitalPhone;
   const latestHospitalDistance =
@@ -159,14 +245,8 @@ export default function AlertsScreen() {
         ? 'Available'
         : 'Unavailable'
       : '--';
-  const latestMessage = buildEmergencyMessage(
-    latestSos?.raw ?? null,
-    latestCoordinates?.latitude,
-    latestCoordinates?.longitude
-  );
-
-  const liveLatitude = latestReading?.gps_lat;
-  const liveLongitude = latestReading?.gps_lon;
+  const liveLatitude = latestReading?.gps_lat ?? latestCoordinates?.latitude;
+  const liveLongitude = latestReading?.gps_lon ?? latestCoordinates?.longitude;
   const hasLiveLocation =
     typeof liveLatitude === 'number' &&
     Number.isFinite(liveLatitude) &&
@@ -265,32 +345,39 @@ export default function AlertsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Guardian Contacts</Text>
-          {familyContacts.length === 0 ? (
-            <Text style={styles.empty}>No guardian contacts available.</Text>
+          <Text style={styles.sectionHint}>
+            Keep your primary emergency contacts updated for fast SOS outreach.
+          </Text>
+          
+          <TouchableOpacity
+            style={styles.editContactsButton}
+            onPress={() => setShowContactsModal(true)}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.editContactsButtonTitle}>Manage Contacts</Text>
+              <Text style={styles.editContactsButtonSub}>{configuredContacts.length} active of 5 slots</Text>
+            </View>
+            <Text style={styles.editContactsButtonArrow}>{'>'}</Text>
+          </TouchableOpacity>
+          {configuredContacts.length === 0 ? (
+            <Text style={styles.empty}>No contacts saved yet.</Text>
           ) : (
-            familyContacts.map((contact, index) => (
-              <View key={contact.id} style={styles.contactCard}>
-                <Text style={styles.contactTitle}>Contact {index + 1}</Text>
-                <Text style={styles.contactValue}>{contact.name}</Text>
-                <Text style={styles.contactMetaText}>{contact.relationship || 'Guardian contact'}</Text>
-                <Text style={styles.contactValue}>{contact.phone}</Text>
-                <View style={styles.alertActionRow}>
-                  <TouchableOpacity
-                    style={styles.alertActionButton}
-                    onPress={() => openUrl(buildCallLink(contact.phone))}
-                  >
-                    <Text style={styles.alertActionText}>Call</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.alertActionButton}
-                    onPress={() => openUrl(buildSmsLink(contact.phone, latestMessage))}
-                  >
-                    <Text style={styles.alertActionText}>SMS</Text>
-                  </TouchableOpacity>
+            configuredContacts.slice(0, 3).map((contact) => (
+              <View key={contact.id} style={styles.contactPreviewCard}>
+                <View style={styles.contactPreviewTopRow}>
+                  <Text style={styles.contactPreviewName}>{contact.name}</Text>
+                  <Text style={styles.contactPreviewMeta}>
+                    {contact.relationship || 'Emergency Contact'}
+                  </Text>
                 </View>
+                <Text style={styles.contactPreviewPhone}>{contact.phone}</Text>
+                {contact.whatsapp ? (
+                  <Text style={styles.contactPreviewMeta}>WhatsApp: {contact.whatsapp}</Text>
+                ) : null}
               </View>
             ))
           )}
+          {saveStatus ? <Text style={styles.saveStatusText}>{saveStatus}</Text> : null}
         </View>
 
         <View style={styles.section}>
@@ -399,12 +486,93 @@ export default function AlertsScreen() {
         </View>
       </ScrollView>
 
+      <Modal visible={showContactsModal} animationType="slide" transparent={false}>
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowContactsModal(false)}>
+              <Text style={styles.modalCloseButton}>x</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Guardian Contacts</Text>
+            <View style={{ width: 40 }} />
+          </View>
+          <Text style={styles.modalSubtitle}>
+            Fill only the contacts you need. Name and phone are required for each saved contact.
+          </Text>
+
+          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalContent}>
+            {contactDrafts.map((contact, index) => (
+              <View key={contact.id} style={styles.modalContactCard}>
+                <View style={styles.modalContactHeader}>
+                  <Text style={styles.modalContactNumber}>Contact {index + 1}</Text>
+                  <Text style={styles.modalContactStatus}>
+                    {contact.name && contact.phone ? 'Ready' : 'Empty'}
+                  </Text>
+                </View>
+                <View style={styles.modalContactFields}>
+                  <Text style={styles.inputLabel}>Name</Text>
+                  <TextInput
+                    style={styles.modalTextInput}
+                    placeholder="Full name"
+                    placeholderTextColor={colors.icon}
+                    value={contact.name}
+                    onChangeText={(text) => updateContactDraft(index, 'name', text)}
+                  />
+                  <Text style={styles.inputLabel}>Phone</Text>
+                  <TextInput
+                    style={styles.modalTextInput}
+                    placeholder="Primary phone number"
+                    placeholderTextColor={colors.icon}
+                    keyboardType="phone-pad"
+                    value={contact.phone}
+                    onChangeText={(text) => updateContactDraft(index, 'phone', text)}
+                  />
+                  <Text style={styles.inputLabel}>WhatsApp (optional)</Text>
+                  <TextInput
+                    style={styles.modalTextInput}
+                    placeholder="WhatsApp number"
+                    placeholderTextColor={colors.icon}
+                    keyboardType="phone-pad"
+                    value={contact.whatsapp}
+                    onChangeText={(text) => updateContactDraft(index, 'whatsapp', text)}
+                  />
+                  <Text style={styles.inputLabel}>Relationship (optional)</Text>
+                  <TextInput
+                    style={styles.modalTextInput}
+                    placeholder="Parent, spouse, sibling..."
+                    placeholderTextColor={colors.icon}
+                    value={contact.relationship}
+                    onChangeText={(text) => updateContactDraft(index, 'relationship', text)}
+                  />
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={[styles.modalSaveButton, isSavingContacts && styles.saveButtonLoading]}
+              disabled={isSavingContacts}
+              onPress={handleSaveContacts}
+            >
+              <View style={styles.saveButtonContent}>
+                {isSavingContacts ? (
+                  <>
+                    <ActivityIndicator color="#fff" size="small" style={styles.saveButtonSpinner} />
+                    <Text style={styles.saveButtonText}>Saving...</Text>
+                  </>
+                ) : (
+                  <Text style={styles.saveButtonText}>Save Contacts</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
       <SosAlertModal
         visible={Boolean(selectedAlert)}
         onClose={() => setSelectedAlert(null)}
         alert={selectedAlert}
-        reading={null}
-        fallbackLocationReading={null}
+        reading={latestReading}
         deviceId={selectedAlert?.device_id ?? null}
       />
     </SafeAreaView>
@@ -536,6 +704,72 @@ const createStyles = (colors: any) =>
       fontSize: 12,
       color: colors.icon,
     },
+    sectionHint: {
+      fontSize: 12,
+      color: colors.icon,
+      marginBottom: 10,
+      lineHeight: 18,
+    },
+    editContactCard: {
+      backgroundColor: colors.mutedSurface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      padding: 14,
+      marginBottom: 12,
+    },
+    editContactLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 8,
+    },
+    textInput: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor: colors.background,
+      color: colors.text,
+      marginBottom: 10,
+      fontSize: 14,
+    },
+    saveButton: {
+      backgroundColor: colors.tint,
+      borderRadius: 16,
+      paddingVertical: 14,
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    saveButtonLoading: {
+      opacity: 0.8,
+      borderWidth: 1,
+      borderColor: colors.tint,
+    },
+    saveButtonContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    saveButtonSpinner: {
+      marginRight: 4,
+    },
+    saveLockIcon: {
+      fontSize: 16,
+      marginRight: 4,
+    },
+    saveButtonText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    saveStatusText: {
+      fontSize: 13,
+      color: colors.text,
+      marginBottom: 10,
+    },
     empty: {
       fontSize: 13,
       color: colors.icon,
@@ -617,4 +851,154 @@ const createStyles = (colors: any) =>
     disabledCard: {
       opacity: 0.45,
     },
+    editContactsButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.mutedSurface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 10,
+    },
+    editContactsButtonTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 2,
+    },
+    editContactsButtonSub: {
+      fontSize: 12,
+      color: colors.icon,
+    },
+    editContactsButtonArrow: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.icon,
+    },
+    contactPreviewCard: {
+      backgroundColor: colors.mutedSurface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      padding: 12,
+      marginBottom: 8,
+    },
+    contactPreviewTopRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 6,
+    },
+    contactPreviewName: {
+      flex: 1,
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    contactPreviewPhone: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '600',
+      marginBottom: 2,
+    },
+    contactPreviewMeta: {
+      color: colors.icon,
+      fontSize: 12,
+    },
+    modalContainer: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    modalCloseButton: {
+      fontSize: 24,
+      color: colors.text,
+      fontWeight: '600',
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: colors.text,
+    },
+    modalSubtitle: {
+      color: colors.icon,
+      fontSize: 12,
+      lineHeight: 18,
+      paddingHorizontal: 16,
+      paddingTop: 10,
+    },
+    modalScroll: {
+      flex: 1,
+    },
+    modalContent: {
+      padding: 16,
+      gap: 16,
+    },
+    modalContactCard: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      padding: 14,
+      gap: 10,
+    },
+    modalContactHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    modalContactNumber: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: colors.tint,
+    },
+    modalContactStatus: {
+      fontSize: 11,
+      color: colors.icon,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+    },
+    modalContactFields: {
+      gap: 10,
+    },
+    inputLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.icon,
+      marginBottom: -4,
+    },
+    modalTextInput: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor: colors.background,
+      color: colors.text,
+      fontSize: 13,
+    },
+    modalFooter: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    modalSaveButton: {
+      backgroundColor: colors.tint,
+      borderRadius: 16,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
   });
+
+
