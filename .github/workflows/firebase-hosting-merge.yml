@@ -22,4 +22,4 @@ jobs:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_AI_BASED_SMART_VEHICLE_H_B714B }}
           channelId: live
-          projectId: ai-based-smart-vehicle-h-b714b
+          projectId: ai-based-smart-vehicle-h-9db25
