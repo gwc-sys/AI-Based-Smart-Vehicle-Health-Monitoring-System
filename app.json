@@ -55,6 +55,7 @@
       "firebaseApiKey": "AIzaSyDowbCOXreWmH7FS_4mKgVWkMVJUiiCTXQ",
       "firebaseProjectId": "ai-based-smart-vehicle-h-b714b",
       "firebaseAuthDomain": "ai-based-smart-vehicle-h-b714b.firebaseapp.com",
+      "firebaseDatabaseUrl": "https://ai-based-smart-vehicle-h-9db25-default-rtdb.asia-southeast1.firebasedatabase.app/",
       "firebaseStorageBucket": "ai-based-smart-vehicle-h-b714b.firebasestorage.app",
       "firebaseMessagingSenderId": "414445888340",
       "firebaseAppId": "1:414445888340:web:bdff515ff0415d4a6b9ec1",

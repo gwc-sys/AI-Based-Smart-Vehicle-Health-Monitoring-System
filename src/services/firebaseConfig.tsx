@@ -19,7 +19,7 @@ const firebaseConfig = {
   projectId: Env.FIREBASE_PROJECT_ID ?? 'ai-based-smart-vehicle-h-b714b',
   databaseURL:
     Env.FIREBASE_DATABASE_URL ??
-    'https://ai-based-smart-vehicle-h-b714b-default-rtdb.asia-southeast1.firebasedatabase.app',
+    'https://ai-based-smart-vehicle-h-9db25-default-rtdb.asia-southeast1.firebasedatabase.app/',
   storageBucket: Env.FIREBASE_STORAGE_BUCKET ?? 'ai-based-smart-vehicle-h-b714b.firebasestorage.app',
   messagingSenderId: Env.FIREBASE_MESSAGING_SENDER_ID ?? '414445888340',
   appId: Env.FIREBASE_APP_ID ?? '1:414445888340:web:bdff515ff0415d4a6b9ec1',

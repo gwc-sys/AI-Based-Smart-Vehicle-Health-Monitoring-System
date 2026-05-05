@@ -1,5 +1,6 @@
 import SosAlertModal from '@/components/SosAlertModal';
 import { useAppTheme } from '@/context/ThemeContext';
+import useVehicleRealtimeStream from '@/hooks/useVehicleRealtimeStream';
 import {
     buildCallLink,
     buildDirectionsLink,
@@ -16,8 +17,6 @@ import {
     getAlertCoordinates,
     getHospitalCoordinates,
     isSosVehicleAlert,
-    subscribeToVehicleAlerts,
-    subscribeToVehicleReadings,
     VehicleRealtimeAlert,
     VehicleRealtimeReading,
 } from '@/services/vehicleRealtimeService';
@@ -133,6 +132,9 @@ export default function AlertsScreen() {
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [showContactsModal, setShowContactsModal] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<VehicleRealtimeAlert | null>(null);
+  const { readings: realtimeReadings, alerts: realtimeAlerts } = useVehicleRealtimeStream({
+    readingEmitIntervalMs: 3000,
+  });
   const [latestReading, setLatestReading] = useState<VehicleRealtimeReading | null>(null);
   const latestSos = alerts.find((item) => item.type === 'sos') ?? null;
 
@@ -142,29 +144,21 @@ export default function AlertsScreen() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = subscribeToVehicleAlerts((realtimeAlerts) => {
-      setAlerts(realtimeAlerts.map(mapRealtimeAlert));
-    });
-
-    return unsubscribe;
-  }, []);
+    setAlerts(realtimeAlerts.map(mapRealtimeAlert));
+  }, [realtimeAlerts]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToVehicleReadings((readings) => {
-      const lastGps = [...readings]
-        .reverse()
-        .find(
-          (reading) =>
-            typeof reading.gps_lat === 'number' &&
-            Number.isFinite(reading.gps_lat) &&
-            typeof reading.gps_lon === 'number' &&
-            Number.isFinite(reading.gps_lon)
-        );
-      setLatestReading(lastGps ?? null);
-    });
-
-    return unsubscribe;
-  }, []);
+    const lastGps = [...realtimeReadings]
+      .reverse()
+      .find(
+        (reading) =>
+          typeof reading.gps_lat === 'number' &&
+          Number.isFinite(reading.gps_lat) &&
+          typeof reading.gps_lon === 'number' &&
+          Number.isFinite(reading.gps_lon)
+      );
+    setLatestReading(lastGps ?? null);
+  }, [realtimeReadings]);
 
   useEffect(() => {
     setContactDrafts(buildContactDrafts(emergencyConfig.familyContacts));

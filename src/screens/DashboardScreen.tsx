@@ -2,17 +2,15 @@ import SensorCard from '@/components/SensorCard';
 import SosAlertModal from '@/components/SosAlertModal';
 import { useAppTheme } from '@/context/ThemeContext';
 import useAuth from '@/hooks/useAuth';
+import useIncidentPipeline from '@/hooks/useIncidentPipeline';
+import useVehicleRealtimeStream from '@/hooks/useVehicleRealtimeStream';
 import { useVehicleData } from '@/hooks/useVehicleData';
 import { buildCallLink, buildDirectionsLink, buildGoogleMapsLink } from '@/services/emergencyConfigService';
 import {
     HospitalAiRecommendation,
     isSosVehicleAlert,
-    subscribeToVehicleAlerts,
-    subscribeToVehicleReadings,
-    subscribeToVehicleStatus,
     VehicleRealtimeAlert,
     VehicleRealtimeReading,
-    VehicleRealtimeStatus,
 } from '@/services/vehicleRealtimeService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
@@ -645,9 +643,9 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const { vehicles, loading, refresh } = useVehicleData();
   const [showCharts, setShowCharts] = useState(true);
-  const [realtimeReadings, setRealtimeReadings] = useState<VehicleRealtimeReading[]>([]);
-  const [deviceStatus, setDeviceStatus] = useState<VehicleRealtimeStatus | null>(null);
-  const [realtimeAlerts, setRealtimeAlerts] = useState<VehicleRealtimeAlert[]>([]);
+  const { readings: realtimeReadings, status: deviceStatus, alerts: realtimeAlerts } = useVehicleRealtimeStream({
+    readingEmitIntervalMs: 3000,
+  });
   const [selectedSensorId, setSelectedSensorId] = useState<(typeof SENSOR_ORDER)[number]>('accelerometer');
   const [isSensorModalVisible, setIsSensorModalVisible] = useState(false);
   const [isSosModalVisible, setIsSosModalVisible] = useState(false);
@@ -671,38 +669,26 @@ export default function DashboardScreen() {
   }, [refresh]);
 
   useEffect(() => {
-    const unsubscribeReadings = subscribeToVehicleReadings(setRealtimeReadings);
-    const unsubscribeStatus = subscribeToVehicleStatus(setDeviceStatus);
-    const unsubscribeAlerts = subscribeToVehicleAlerts((alerts) => {
-      setRealtimeAlerts(alerts);
+    const nextSosAlert = realtimeAlerts.find(isSosVehicleAlert) ?? null;
+    const nextSosKey = nextSosAlert
+      ? `${nextSosAlert.id ?? 'no-id'}|${nextSosAlert.last_updated ?? nextSosAlert.timestamp ?? 'no-time'}`
+      : null;
 
-      const nextSosAlert = alerts.find(isSosVehicleAlert) ?? null;
-      const nextSosKey = nextSosAlert
-        ? `${nextSosAlert.id ?? 'no-id'}|${nextSosAlert.last_updated ?? nextSosAlert.timestamp ?? 'no-time'}`
-        : null;
-
-      // First stabilized snapshot is baseline only; do not show stale SOS from previous sessions.
-      if (!sosHydratedRef.current) {
-        lastSosIdRef.current = nextSosKey;
-        sosHydratedRef.current = true;
-        return;
-      }
-
-      // Global SOS modal already handles new SOS event popups.
-      // Keep local modal for manual opening from the dashboard banner only.
-      if (!nextSosKey) {
-        setIsSosModalVisible(false);
-      }
-
+    // First stabilized snapshot is baseline only; do not show stale SOS from previous sessions.
+    if (!sosHydratedRef.current) {
       lastSosIdRef.current = nextSosKey;
-    });
+      sosHydratedRef.current = true;
+      return;
+    }
 
-    return () => {
-      unsubscribeReadings();
-      unsubscribeStatus();
-      unsubscribeAlerts();
-    };
-  }, []);
+    // Global SOS modal already handles new SOS event popups.
+    // Keep local modal for manual opening from the dashboard banner only.
+    if (!nextSosKey) {
+      setIsSosModalVisible(false);
+    }
+
+    lastSosIdRef.current = nextSosKey;
+  }, [realtimeAlerts]);
 
   const sensorReadings = useMemo(
     () => createSensorReadings(realtimeReadings, realtimeAlerts),
@@ -728,6 +714,10 @@ export default function DashboardScreen() {
     [dashboardAlerts]
   );
   const latestRealtimeReading = realtimeReadings[realtimeReadings.length - 1] ?? null;
+  useIncidentPipeline({
+    readings: realtimeReadings,
+    alerts: realtimeAlerts,
+  });
   const latestHeartReading = useMemo(
     () =>
       [...realtimeReadings]
