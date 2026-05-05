@@ -1,10 +1,11 @@
 import { usePrediction } from '@/hooks/usePrediction';
 import { useVehicleData } from '@/hooks/useVehicleData';
 import { useAppTheme } from '@/context/ThemeContext';
+import useHospitalRecommendation from '@/hooks/useHospitalRecommendation';
+import useVehicleRealtimeStream from '@/hooks/useVehicleRealtimeStream';
 import {
   getAlertCoordinates,
   HospitalAiRecommendation,
-  subscribeToVehicleAlerts,
   VehicleRealtimeAlert,
 } from '@/services/vehicleRealtimeService';
 import { buildCallLink, buildDirectionsLink, buildGoogleMapsLink } from '@/services/emergencyConfigService';
@@ -79,12 +80,8 @@ export default function PredictionScreen() {
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(vehicles?.[0]?.id ?? null);
   const [mileage, setMileage] = useState<string>('');
   const [result, setResult] = useState<string | null>(null);
-  const [alerts, setAlerts] = useState<VehicleRealtimeAlert[]>([]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToVehicleAlerts(setAlerts);
-    return () => unsubscribe();
-  }, []);
+  const { alerts, status } = useVehicleRealtimeStream({ readingEmitIntervalMs: 3000 });
+  const realtimeHospitalRecommendation = useHospitalRecommendation(status?.device_id ?? null);
 
   const latestAiAlert = useMemo(() => {
     const current = alerts.find((a) => a.fromCurrentEmergency);
@@ -111,8 +108,8 @@ export default function PredictionScreen() {
       typeof fallback.distance_km === 'number' ||
       fallback.phone ||
       fallback.map_url;
-    return source ?? (hasFallback ? fallback : null);
-  }, [latestAiAlert]);
+    return source ?? (hasFallback ? fallback : realtimeHospitalRecommendation);
+  }, [latestAiAlert, realtimeHospitalRecommendation]);
 
   const aiHeartRateDisplay =
     typeof latestAiAlert?.heart_rate_bpm === 'number' && Number.isFinite(latestAiAlert.heart_rate_bpm)

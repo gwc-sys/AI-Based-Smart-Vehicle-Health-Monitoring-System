@@ -788,6 +788,40 @@ function getLatestReadingSortValue(readings: VehicleRealtimeReading[]) {
   return 0;
 }
 
+function buildReadingIdentity(reading: VehicleRealtimeReading) {
+  const timestamp = typeof reading.timestamp === 'number' ? reading.timestamp : 'no-ts';
+  const deviceId = (reading as Record<string, unknown>).device_id ?? (reading as Record<string, unknown>).deviceId;
+  const heartRate = typeof reading.heart_rate_bpm === 'number' ? reading.heart_rate_bpm : 'no-hr';
+  const spo2 = typeof reading.oxygen_saturation_spo2 === 'number' ? reading.oxygen_saturation_spo2 : 'no-spo2';
+  const accel = typeof reading.accel_total_g === 'number' ? reading.accel_total_g : 'no-accel';
+  return `${String(deviceId ?? 'unknown-device')}|${String(timestamp)}|${String(heartRate)}|${String(spo2)}|${String(accel)}`;
+}
+
+function mergeSourceReadings(sourceStates: Record<ReadingSourcePath, ReadingSourceState>) {
+  const deduped = new Map<string, VehicleRealtimeReading>();
+
+  for (const path of READING_SOURCE_PATHS) {
+    const state = sourceStates[path];
+    for (const reading of state.readings) {
+      const identity = buildReadingIdentity(reading);
+      const existing = deduped.get(identity);
+      if (!existing) {
+        deduped.set(identity, reading);
+        continue;
+      }
+
+      const merged = {
+        ...existing,
+        ...reading,
+        receivedAt: Math.max(existing.receivedAt ?? 0, reading.receivedAt ?? 0) || undefined,
+      };
+      deduped.set(identity, merged);
+    }
+  }
+
+  return sortByTimestamp(Array.from(deduped.values())).slice(-120);
+}
+
 export function subscribeToVehicleReadings(
   callback: (readings: VehicleRealtimeReading[]) => void,
   options: VehicleReadingsSubscriptionOptions = {}
@@ -852,28 +886,12 @@ export function subscribeToVehicleReadings(
     }, delay);
   };
 
-  const emitPreferredReadings = () => {
+  const emitMergedReadings = () => {
     const hasAnyReadySource = READING_SOURCE_PATHS.some((path) => sourceStates[path].ready);
     if (!hasAnyReadySource) {
       return;
     }
-
-    const preferredReadings = READING_SOURCE_PATHS
-      .map((path, index) => ({
-        index,
-        readings: sourceStates[path].readings,
-        sortValue: getLatestReadingSortValue(sourceStates[path].readings),
-      }))
-      .filter((entry) => entry.readings.length > 0)
-      .sort((left, right) => {
-        if (left.sortValue !== right.sortValue) {
-          return right.sortValue - left.sortValue;
-        }
-
-        return left.index - right.index;
-      })[0]?.readings ?? [];
-
-    scheduleEmit(preferredReadings);
+    scheduleEmit(mergeSourceReadings(sourceStates));
   };
 
   const unsubscribers = READING_SOURCE_PATHS.map((path) => {
@@ -887,7 +905,7 @@ export function subscribeToVehicleReadings(
           readings: extractReadingsFromSnapshotValue(snapshot.val(), path, Date.now()),
         };
 
-        emitPreferredReadings();
+        emitMergedReadings();
       },
       (error) => {
         console.warn(`[Realtime] Failed to read "${path}"`, error);
@@ -896,7 +914,7 @@ export function subscribeToVehicleReadings(
           readings: [],
         };
 
-        emitPreferredReadings();
+        emitMergedReadings();
       }
     );
   });

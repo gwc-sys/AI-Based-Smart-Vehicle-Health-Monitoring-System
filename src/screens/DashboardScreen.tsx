@@ -2,6 +2,7 @@ import SensorCard from '@/components/SensorCard';
 import SosAlertModal from '@/components/SosAlertModal';
 import { useAppTheme } from '@/context/ThemeContext';
 import useAuth from '@/hooks/useAuth';
+import useHospitalRecommendation from '@/hooks/useHospitalRecommendation';
 import useIncidentPipeline from '@/hooks/useIncidentPipeline';
 import useVehicleRealtimeStream from '@/hooks/useVehicleRealtimeStream';
 import { useVehicleData } from '@/hooks/useVehicleData';
@@ -646,6 +647,7 @@ export default function DashboardScreen() {
   const { readings: realtimeReadings, status: deviceStatus, alerts: realtimeAlerts } = useVehicleRealtimeStream({
     readingEmitIntervalMs: 3000,
   });
+  const realtimeHospitalRecommendation = useHospitalRecommendation(deviceStatus?.device_id ?? null);
   const [selectedSensorId, setSelectedSensorId] = useState<(typeof SENSOR_ORDER)[number]>('accelerometer');
   const [isSensorModalVisible, setIsSensorModalVisible] = useState(false);
   const [isSosModalVisible, setIsSosModalVisible] = useState(false);
@@ -790,8 +792,8 @@ export default function DashboardScreen() {
       typeof fallback.distance_km === 'number' ||
       fallback.phone ||
       fallback.map_url;
-    return source ?? (hasFallback ? fallback : null);
-  }, [latestAiAlert]);
+    return source ?? (hasFallback ? fallback : realtimeHospitalRecommendation);
+  }, [latestAiAlert, realtimeHospitalRecommendation]);
   const aiHeartRateDisplay =
     typeof latestAiAlert?.heart_rate_bpm === 'number' && Number.isFinite(latestAiAlert.heart_rate_bpm)
       ? `${latestAiAlert.heart_rate_bpm.toFixed(0)} bpm`
